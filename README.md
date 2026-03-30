@@ -14,8 +14,8 @@ Team Leader:
 
 Team Members:
 1.	Dion Dhima - GitHub: ddhima23 - Email: ddhima23@epoka.edu.al
-2.	Eldrina Çela - GitHub: ecela23 - Email: ecela@epoka.edu.al
-3.	Ester Tollozhina - GitHub: estert23- Email: etollozhina@epoka.edu.al
+2.	Eldrina Çela - GitHub: ecela23 - Email: ecela23@epoka.edu.al
+3.	Ester Tollozhina - GitHub: estert233- Email: etollozhina23@epoka.edu.al
 
 Project Details
 Project Title: ALBus — Albania's Intercity Bus Network
@@ -44,11 +44,11 @@ ALBus is an application built with Java 23 and JavaFX 23, backed by a MySQL data
 
 •	Operators manage their terminal's routes, trips, drivers, and bookings. They can send and receive inter-terminal route requests and set daily capacity limits.
 
-•	Drivers view their assigned trips, mark departure/arrival, and manage passenger payment collection on board.
+•	Drivers view their assigned trips, mark departure/arrival, and manage passenger payment collection on board, if the cash method of payment is selected.
 
 •	Passengers search for available trips, book multiple tickets in one session, get seats automatically assigned, apply automatic age-based discounts, and pay online or at the terminal.
 
-Key features include secure password hashing, automatic seat assignment, discount tiers (children, students, elderly), simulated card payment, and a clean JavaFX UI.
+Key features include secure password hashing, automatic seat assignment, discount tiers (children, students, elderly), card payment, and a clean JavaFX UI.
 
 Roles and Tasks
 
