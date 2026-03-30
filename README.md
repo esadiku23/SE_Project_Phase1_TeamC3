@@ -160,6 +160,11 @@ Frontend:
 
 •	Implement age validation warnings and the under-6 contact operator prompt
 
+•	Show booking history. 
+
+•	Display ticket/ e-ticket, and printing option.
+
+
 Backend:
 
 •	Connect all passenger views to the booking and discount controllers
@@ -168,7 +173,8 @@ Backend:
 
 •	Implement multi-ticket booking with per-passenger detail entry and automatic seat assignment
 
-•	Implement simulated online card payment flow and pay-at-terminal booking hold
+•	Implement online card payment flow and pay-at-terminal booking hold
+
 
 QA Lead:
 
