@@ -1,0 +1,1458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>ALBus — Passenger Dashboard</title>
+    <link rel="stylesheet" href="/css/albus.css"/>
+    <style>
+        /* ── Section visibility ── */
+        .section { display: none; }
+        .section.active { display: block; }
+
+        /* ── Mobile nav ── */
+        .mobile-menu-btn {
+            display: none; background: transparent;
+            border: 1px solid rgba(255,255,255,.25); color: rgba(255,255,255,.85);
+            font-size: 18px; width: 36px; height: 36px; border-radius: 6px;
+            cursor: pointer; align-items: center; justify-content: center;
+        }
+        .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 49; }
+        .sidebar-overlay.show { display: block; }
+
+        /* ── Trip search results ── */
+        .trip-result {
+            background: var(--white); border: 1.5px solid var(--border);
+            border-radius: 14px; padding: 20px; margin-bottom: 12px;
+            display: flex; align-items: center; gap: 16px;
+            cursor: pointer; transition: border-color .15s, box-shadow .15s;
+        }
+        .trip-result:hover { border-color: var(--red); box-shadow: 0 4px 16px rgba(226,36,36,.1); }
+        .trip-result.selected { border-color: var(--red); background: var(--red-light); }
+        .trip-result-route {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 22px; font-weight: 700; color: var(--black);
+        }
+        .trip-result-meta { font-size: 13px; color: var(--slate-mid); margin-top: 4px; }
+        .trip-result-price {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 26px; font-weight: 700; color: var(--red);
+            text-align: right; flex-shrink: 0;
+        }
+        .trip-result-avail { font-size: 12px; color: var(--slate-mid); text-align: right; }
+
+        /* ── Booking form passenger cards ── */
+        .passenger-card {
+            background: var(--tundra); border: 1.5px solid var(--border);
+            border-radius: 12px; padding: 18px; margin-bottom: 12px;
+        }
+        .passenger-card-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .passenger-card-title {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 16px; font-weight: 700; color: var(--slate);
+        }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+        /* ── Discount breakdown ── */
+        .discount-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: var(--warning-bg); color: var(--warning);
+            border: 1px solid var(--yellow-dark); border-radius: 8px;
+            padding: 6px 12px; font-size: 13px; font-weight: 600; margin-top: 6px;
+        }
+
+        /* ── Price summary ── */
+        .price-summary {
+            background: var(--slate); color: #fff;
+            border-radius: 14px; padding: 20px; margin-top: 16px;
+        }
+        .price-row {
+            display: flex; justify-content: space-between;
+            font-size: 14px; padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,.1);
+        }
+        .price-row:last-child { border-bottom: none; }
+        .price-total {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 24px; font-weight: 700; color: var(--yellow);
+        }
+
+        /* ── E-Ticket ── */
+        .ticket-outer {
+            max-width: 540px; margin: 0 auto;
+        }
+        .ticket-body {
+            background: var(--white); border: 1.5px solid var(--border);
+            border-radius: 16px; overflow: hidden;
+            box-shadow: 0 4px 20px rgba(46,58,66,.1);
+        }
+        .ticket-top {
+            background: var(--slate); padding: 20px 24px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .ticket-route-display {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 26px; font-weight: 800; color: #fff; letter-spacing: .02em;
+        }
+        .ticket-divider {
+            border: none; border-top: 2px dashed var(--border); margin: 0;
+        }
+        .ticket-details { padding: 20px 24px; }
+        .ticket-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .ticket-field-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--slate-mid); margin-bottom: 3px; }
+        .ticket-field-value { font-size: 15px; font-weight: 600; color: var(--black); }
+        .ticket-seat-big {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 48px; font-weight: 800; color: var(--red);
+            line-height: 1;
+        }
+        .ticket-footer-bar {
+            background: var(--red); padding: 12px 24px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .ticket-footer-bar span { font-size: 13px; font-weight: 600; color: rgba(255,255,255,.8); }
+        .ticket-footer-bar strong { color: #fff; }
+
+        /* ── Booking history card ── */
+        .booking-history-card {
+            background: var(--white); border: 1px solid var(--border);
+            border-radius: 12px; padding: 16px; margin-bottom: 10px;
+            display: flex; align-items: center; gap: 14px;
+            cursor: pointer; transition: box-shadow .15s;
+        }
+        .booking-history-card:hover { box-shadow: 0 2px 12px rgba(46,58,66,.1); }
+        .booking-history-route {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 18px; font-weight: 700; color: var(--black); flex: 1;
+        }
+        .booking-history-meta { font-size: 12px; color: var(--slate-mid); }
+
+        /* ── Payment method selector ── */
+        .payment-options { display: flex; gap: 12px; margin-top: 4px; }
+        .payment-option {
+            flex: 1; border: 2px solid var(--border); border-radius: 10px;
+            padding: 14px; cursor: pointer; transition: border-color .15s, background .15s;
+            text-align: center;
+        }
+        .payment-option:hover { border-color: var(--slate-mid); }
+        .payment-option.selected { border-color: var(--red); background: var(--red-light); }
+        .payment-option-icon { font-size: 24px; margin-bottom: 6px; }
+        .payment-option-label { font-size: 13px; font-weight: 600; color: var(--black); }
+        .payment-option-sub { font-size: 11px; color: var(--slate-mid); margin-top: 2px; }
+
+        /* ── Toast ── */
+        .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+        .toast { background: var(--slate); color: #fff; padding: 12px 18px; border-radius: 10px; font-size: 13px; font-weight: 500; box-shadow: 0 4px 16px rgba(0,0,0,.2); animation: slideIn .2s ease; max-width: 320px; }
+        .toast.success { background: var(--success); }
+        .toast.error   { background: #C0392B; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        .nav-badge {
+            display: inline-block; background: var(--red);
+            color: #fff; font-size: 10px; font-weight: 700;
+            padding: 2px 6px; border-radius: 999px; margin-left: 6px;
+        }
+
+        /* ── Spinner ── */
+        .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
+        .spinner.dark { border-color: rgba(0,0,0,.15); border-top-color: var(--slate); }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Modal ── */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100; align-items: center; justify-content: center; }
+        .modal-overlay.show { display: flex; }
+
+        /* ── Empty state ── */
+        .empty-state { text-align: center; padding: 48px 24px; color: var(--slate-mid); }
+        .empty-state-icon { font-size: 40px; margin-bottom: 12px; }
+        .empty-state-title { font-family: 'Barlow Condensed', sans-serif; font-size: 20px; font-weight: 700; color: var(--black); margin-bottom: 6px; }
+
+        /* ── Step indicator ── */
+        .steps { display: flex; gap: 0; margin-bottom: 28px; }
+        .step { flex: 1; text-align: center; position: relative; }
+        .step::before {
+            content: ''; position: absolute; top: 16px; left: 50%; right: -50%;
+            height: 2px; background: var(--border); z-index: 0;
+        }
+        .step:last-child::before { display: none; }
+        .step-circle {
+            width: 32px; height: 32px; border-radius: 50%;
+            background: var(--border); color: var(--slate-mid);
+            font-size: 13px; font-weight: 700;
+            display: inline-flex; align-items: center; justify-content: center;
+            position: relative; z-index: 1; margin-bottom: 6px;
+        }
+        .step.active .step-circle { background: var(--red); color: #fff; }
+        .step.done .step-circle { background: var(--success); color: #fff; }
+        .step-label { font-size: 11px; font-weight: 600; color: var(--slate-mid); text-transform: uppercase; letter-spacing: .06em; }
+        .step.active .step-label { color: var(--red); }
+        .step.done .step-label { color: var(--success); }
+
+        /* ── Under-6 warning ── */
+        .under6-warning {
+            background: var(--warning-bg); border: 1px solid var(--yellow-dark);
+            border-radius: 8px; padding: 10px 14px; font-size: 13px;
+            color: var(--warning); margin-top: 8px; display: none;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .mobile-menu-btn { display: inline-flex; }
+            .dashboard { grid-template-columns: 1fr; grid-template-areas: "topbar" "content"; }
+            .sidebar { display: block !important; position: fixed; left: -220px; top: 0; bottom: 0; width: 220px; z-index: 50; transition: left .25s ease; padding-top: 72px; }
+            .sidebar.open { left: 0; }
+            .content { padding: 20px 16px; }
+            .form-row, .form-row-3 { grid-template-columns: 1fr; }
+            .ticket-grid { grid-template-columns: 1fr; }
+            .payment-options { flex-direction: column; }
+            .trip-result { flex-wrap: wrap; }
+            .stat-grid { grid-template-columns: repeat(2,1fr); }
+            .topbar-label { display: none; }
+            .steps { gap: 4px; }
+            .step-label { display: none; }
+        }
+        @media print {
+            .dashboard { display: block; }
+            .topbar, .sidebar, .nav-item, .btn, .steps, .page-header { display: none !important; }
+            .content { padding: 0; }
+            .section { display: none !important; }
+            #print-area { display: block !important; }
+            .ticket-outer { max-width: 100%; }
+        }
+        #print-area { display: none; }
+    </style>
+</head>
+<body>
+<div class="dashboard">
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+        <button class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
+        <div class="wm wm-sm"><span class="wm-al">AL</span><span class="wm-bus">Bus</span></div>
+        <span class="topbar-spacer"></span>
+        <button class="topbar-btn" id="userBtn">Passenger</button>
+        <button class="topbar-btn logout" onclick="logout()">Logout</button>
+    </header>
+
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+    <!-- SIDEBAR -->
+    <nav class="sidebar" id="sidebar">
+        <button class="nav-item active" onclick="showSection('search', this)">🔎 Search Trips</button>
+        <button class="nav-item" onclick="showSection('history', this)">🎟️ My Bookings</button>
+        <button class="nav-item" onclick="showSection('contact', this)">☎️ Contact Operator</button>
+        <button class="nav-item" onclick="showSection('messages', this)">💬 Messages <span id="notifBadge" class="nav-badge" style="display:none;">0</span></button>
+    </nav>
+
+    <!-- CONTENT -->
+    <main class="content">
+
+        <!-- ══════════════ SEARCH & BOOK ══════════════ -->
+        <section id="search" class="section active">
+
+            <!-- STEP INDICATOR -->
+            <div class="steps" id="stepBar">
+                <div class="step active" id="step1">
+                    <div class="step-circle">1</div>
+                    <div class="step-label">Search</div>
+                </div>
+                <div class="step" id="step2">
+                    <div class="step-circle">2</div>
+                    <div class="step-label">Passengers</div>
+                </div>
+                <div class="step" id="step3">
+                    <div class="step-circle">3</div>
+                    <div class="step-label">Payment</div>
+                </div>
+                <div class="step" id="step4">
+                    <div class="step-circle">4</div>
+                    <div class="step-label">Confirmation</div>
+                </div>
+            </div>
+
+            <!-- ── STEP 1: SEARCH ── -->
+            <div id="pane-search">
+                <div class="page-header">
+                    <h1 class="page-title">Search Trips</h1>
+                </div>
+
+                <div class="card" style="margin-bottom:20px;">
+                    <div class="form-row-3" style="align-items:flex-end;gap:16px;">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label">From <span style="color:var(--red);">*</span></label>
+                            <select class="form-control" id="searchOrigin">
+                                <option value="">Select origin city</option>
+                                <option>Tiranë Terminali Veri-Jug</option><option>Tiranë Terminali Lindor</option><option>Durrës</option><option>Shkodër</option>
+                                <option>Vlorë</option><option>Gjirokastër</option><option>Korçë</option>
+                                <option>Elbasan</option><option>Berat</option><option>Fier</option>
+                                <option>Lushnjë</option><option>Kavajë</option><option>Pogradec</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label">To <span style="color:var(--slate-mid);font-weight:400;">(optional)</span></label>
+                            <select class="form-control" id="searchDest">
+                                <option value="">Any destination</option>
+                                <option>Tiranë Terminali Veri-Jug</option><option>Tiranë Terminali Lindor</option><option>Durrës</option><option>Shkodër</option>
+                                <option>Vlorë</option><option>Gjirokastër</option><option>Korçë</option>
+                                <option>Elbasan</option><option>Berat</option><option>Fier</option>
+                                <option>Lushnjë</option><option>Kavajë</option><option>Pogradec</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label class="form-label">Date <span style="color:var(--slate-mid);font-weight:400;">(optional)</span></label>
+                            <input class="form-control" type="date" id="searchDate"/>
+                        </div>
+                    </div>
+                    <div style="margin-top:16px;display:flex;gap:10px;align-items:center;">
+                        <button class="btn btn-primary btn-lg" onclick="searchTrips()" id="searchBtn">Search Trips</button>
+                        <button class="btn btn-ghost" onclick="clearSearch()">Clear</button>
+                    </div>
+                </div>
+
+                <div id="searchResults" style="display:none;">
+                    <div class="page-header" style="margin-bottom:12px;">
+                        <h2 class="section-title" id="resultsLabel">Results</h2>
+                    </div>
+                    <div id="tripResultsList"></div>
+
+                    <div id="bookingCTA" style="display:none;margin-top:16px;">
+                        <div class="alert alert-success show" style="margin-bottom:12px;">
+                            ✓ Trip selected. How many passengers are travelling?
+                        </div>
+                        <div class="alert alert-info" id="seatLimitAlert" style="margin-bottom:12px;"></div>
+                        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+                            <div class="form-group" style="margin-bottom:0;min-width:180px;">
+                                <label class="form-label">Number of Passengers</label>
+                                <select class="form-control" id="passengerCount" onchange="updatePassengerCount()">
+                                    <option value="1">1 passenger</option>
+                                    <option value="2">2 passengers</option>
+                                    <option value="3">3 passengers</option>
+                                    <option value="4">4 passengers</option>
+                                    <option value="5">5 passengers</option>
+                                    <option value="6">6 passengers</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary btn-lg" onclick="goToPassengers()" style="margin-top:16px;">
+                                Continue →
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── STEP 2: PASSENGER DETAILS ── -->
+            <div id="pane-passengers" style="display:none;">
+                <div class="page-header">
+                    <h1 class="page-title">Passenger Details</h1>
+                    <button class="btn btn-ghost" onclick="backToSearch()">← Back</button>
+                </div>
+
+                <div class="alert alert-info show" style="margin-bottom:16px;" id="tripSummaryAlert"></div>
+
+                <div id="passengerForms"></div>
+
+                <div id="discountSummary" style="margin-bottom:16px;"></div>
+
+                <button class="btn btn-primary btn-lg" onclick="goToPayment()">Continue to Payment →</button>
+            </div>
+
+            <!-- ── STEP 3: PAYMENT ── -->
+            <div id="pane-payment" style="display:none;">
+                <div class="page-header">
+                    <h1 class="page-title">Payment</h1>
+                    <button class="btn btn-ghost" onclick="backToPassengers()">← Back</button>
+                </div>
+
+                <div class="card" style="margin-bottom:16px;">
+                    <h2 class="section-title" style="margin-bottom:16px;">Choose Payment Method</h2>
+                    <div class="payment-options">
+                        <div class="payment-option selected" id="opt-card" onclick="selectPayment('card')">
+                            <div class="payment-option-icon">💳</div>
+                            <div class="payment-option-label">Pay by Card</div>
+                            <div class="payment-option-sub">Visa, Mastercard — confirmed instantly</div>
+                        </div>
+                        <div class="payment-option" id="opt-cash" onclick="selectPayment('terminal')">
+                            <div class="payment-option-icon">💵</div>
+                            <div class="payment-option-label">Pay at Terminal</div>
+                            <div class="payment-option-sub">Pay cash to driver on board</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card payment fields -->
+                <div class="card" id="cardFields" style="margin-bottom:16px;">
+                    <h2 class="section-title" style="margin-bottom:16px;">Card Details</h2>
+                    <div class="form-group">
+                        <label class="form-label">Cardholder Name</label>
+                        <input class="form-control" id="cardName" placeholder="As on card"/>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Card Number</label>
+                        <input class="form-control" id="cardNumber" placeholder="1234 5678 9012 3456" maxlength="19" oninput="formatCard(this)"/>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Expiry</label>
+                            <input class="form-control" id="cardExpiry" placeholder="MM/YY" maxlength="5" oninput="formatExpiry(this)"/>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">CVV</label>
+                            <input class="form-control" id="cardCVV" placeholder="123" maxlength="3" type="password"/>
+                        </div>
+                    </div>
+                    <div class="alert alert-info show" style="margin-top:4px;">
+                        🔒 Card details are for simulation only and are not stored.
+                    </div>
+                </div>
+
+                <!-- Cash info -->
+                <div class="card" id="cashInfo" style="margin-bottom:16px;display:none;">
+                    <div class="alert alert-warning show">
+                        💵 You'll pay the driver on board. Your seat(s) will be held until the trip departs.
+                    </div>
+                </div>
+
+                <!-- Price summary -->
+                <div class="price-summary" id="priceSummary"></div>
+
+                <div style="margin-top:20px;">
+                    <div class="alert alert-error" id="paymentErr"></div>
+                    <button class="btn btn-primary btn-lg btn-block" onclick="confirmBooking()" id="confirmBtn" style="margin-top:8px;">
+                        Confirm & Book
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── STEP 4: CONFIRMATION ── -->
+            <div id="pane-confirm" style="display:none;">
+                <div class="page-header">
+                    <h1 class="page-title">Booking Confirmed!</h1>
+                    <button class="btn btn-ghost" onclick="startOver()">Book Another Trip</button>
+                </div>
+                <div class="alert alert-success show" style="margin-bottom:20px;" id="confirmAlert"></div>
+                <div id="eTickets"></div>
+                <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
+                    <button class="btn btn-secondary" onclick="printTickets()">🖨 Print Tickets</button>
+                    <button class="btn btn-ghost" onclick="goToHistory()">View Booking History</button>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ══════════════ MY BOOKINGS ══════════════ -->
+        <section id="history" class="section">
+            <div class="page-header">
+                <h1 class="page-title">My Bookings</h1>
+                <button class="btn btn-ghost btn-sm" onclick="loadHistory()">↻ Refresh</button>
+            </div>
+
+            <div class="stat-grid" id="historyStats" style="margin-bottom:20px;"></div>
+
+            <div class="card" style="box-shadow:none;margin-bottom:16px;">
+                <div class="form-row" style="align-items:end;">
+                    <div class="form-group">
+                        <label class="form-label">Trip Status</label>
+                        <select class="form-control" id="bookingTripStatusFilter" onchange="renderHistoryBookings()">
+                            <option value="all">All trips</option>
+                            <option value="scheduled">Scheduled</option>
+                            <option value="departed">Departed</option>
+                            <option value="arrived">Arrived</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Payment</label>
+                        <select class="form-control" id="bookingPaymentFilter" onchange="renderHistoryBookings()">
+                            <option value="all">All payments</option>
+                            <option value="paid">Paid</option>
+                            <option value="pending">Pay on board</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Search</label>
+                        <input class="form-control" id="bookingSearchFilter" placeholder="Route, seat, passenger" oninput="renderHistoryBookings()"/>
+                    </div>
+                </div>
+            </div>
+
+            <div id="historyList">
+                <div class="empty-state">
+                    <span class="spinner dark" style="width:28px;height:28px;"></span>
+                    <p style="margin-top:12px;">Loading bookings…</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="contact" class="section">
+            <div class="page-header">
+                <h1 class="page-title">Contact Operator</h1>
+                <button class="btn btn-ghost btn-sm" onclick="loadContactMessages()">Refresh</button>
+            </div>
+
+            <div class="card" style="margin-bottom:20px;">
+                <div class="form-row" style="align-items:flex-end;">
+                    <div class="form-group">
+                        <label class="form-label">Operator</label>
+                        <select class="form-control" id="contactOperator" onchange="renderOperatorContactInfo()"></select>
+                    </div>
+                    <div class="alert alert-info show" id="operatorContactInfo" style="margin-bottom:16px;"></div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Subject</label>
+                    <input class="form-control" id="contactSubject" placeholder="Booking question, route help, special assistance"/>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Message</label>
+                    <textarea class="form-control" id="contactMessage" rows="4" placeholder="Write your message to the operator"></textarea>
+                </div>
+                <div class="alert alert-error" id="contactErr"></div>
+                <button class="btn btn-primary" onclick="sendContactMessage()" id="sendContactBtn">Send Message</button>
+            </div>
+
+            <h2 class="section-title" style="margin-bottom:12px;">Contact History</h2>
+            <div id="contactHistory" style="display:flex;flex-direction:column;gap:10px;"></div>
+        </section>
+
+        <section id="messages" class="section">
+            <div class="page-header">
+                <h1 class="page-title">Messages</h1>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <button class="btn btn-ghost btn-sm" onclick="markAllNotificationsRead()">Mark All Read</button>
+                    <button class="btn btn-ghost btn-sm" onclick="loadNotifications()">Refresh</button>
+                </div>
+            </div>
+
+            <div id="notificationsList" style="display:flex;flex-direction:column;gap:10px;">
+                <div class="empty-state">Loading messages...</div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<!-- ── TICKET DETAIL MODAL ── -->
+<div class="modal-overlay" id="ticketModal">
+    <div class="modal" style="width:580px;padding:0;background:transparent;box-shadow:none;">
+        <div class="ticket-outer" style="width:100%;">
+            <div id="modalTicketContent"></div>
+        </div>
+        <div style="text-align:center;margin-top:16px;display:flex;gap:10px;justify-content:center;">
+            <button class="btn btn-secondary" onclick="printModal()">🖨 Print</button>
+            <button class="btn btn-ghost" style="border-color:rgba(255,255,255,.4);color:#fff;" onclick="closeModal('ticketModal')">Return</button>
+        </div>
+    </div>
+</div>
+
+<!-- PRINT AREA (hidden, used for window.print) -->
+<div id="print-area"></div>
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="/js/api.js"></script>
+<script>
+    /* ════════════════════════════════════════════════
+       ALBus Passenger Dashboard
+       ════════════════════════════════════════════════ */
+
+    let me            = {};
+    let selectedTrip  = null;
+    let passengers    = [];      // [{firstName, lastName, age, specialNeeds}, ...]
+    let paymentMethod = 'card';
+    let confirmedBookings = [];  // returned from API after booking
+    let contactOperators = [];
+    let historyBookings = [];
+    let sectionHistory = [];
+
+    const SEARCH_TERMINALS = [
+        ['Tiran\u00eb Terminali Veri-Jug', 'Tiran\u00eb Veri-Jug'],
+        ['Tiran\u00eb Terminali Lindor', 'Tiran\u00eb Lindor'],
+        ['Durr\u00ebs', 'Durr\u00ebs'],
+        ['Shkod\u00ebr', 'Shkod\u00ebr'],
+        ['Vlor\u00eb', 'Vlor\u00eb'],
+        ['Elbasan', 'Elbasan'],
+        ['Fier', 'Fier'],
+        ['Pogradec', 'Pogradec']
+    ];
+
+    // Age-based discount tiers (must match backend DiscountService)
+    const DISCOUNT_TIERS = [
+        { label: 'Child (under 6)',    min: 0,  max: 5,  pct: 100, warn: true },
+        { label: 'Child (6–11)',       min: 6,  max: 11, pct: 50  },
+        { label: 'Student (12–25)',    min: 12, max: 25, pct: 20  },
+        { label: 'Senior (65+)',       min: 65, max: 150,pct: 30  },
+    ];
+
+    // ── Init ──────────────────────────────────────────────────────
+    async function init() {
+        try {
+            const res = await API.me();
+            me = res.data;
+            if (me.role !== 'passenger') { window.location.href = '/index.html'; return; }
+            document.getElementById('userBtn').textContent = me.fullName || 'Passenger';
+            populateSearchTerminalSelects();
+            // Blank date searches all upcoming trips.
+            document.getElementById('searchDate').value = '';
+            await Promise.all([loadHistory(), refreshNotifications(), loadContactOperators(), loadContactMessages()]);
+        } catch(e) {
+            window.location.href = '/index.html';
+        }
+    }
+
+    // ── Section nav ───────────────────────────────────────────────
+    function showSection(id, btn, returning = false) {
+        const current = document.querySelector('.section.active')?.id;
+        if (!returning && current && current !== id) sectionHistory.push(current);
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if (btn) btn.classList.add('active');
+        syncReturnButton(id);
+        if (id === 'messages') loadNotifications();
+        if (id === 'contact') {
+            loadContactOperators();
+            loadContactMessages();
+        }
+        closeSidebar();
+    }
+
+    function returnToParentView() {
+        const previous = sectionHistory.pop() || 'search';
+        showSection(previous, document.querySelector(`[onclick*="${previous}"]`), true);
+    }
+
+    function syncReturnButton(id) {
+        document.querySelectorAll('.return-parent-btn').forEach(b => b.remove());
+        if (id === 'search') return;
+        const header = document.querySelector(`#${id} .page-header`);
+        if (!header) return;
+        header.insertAdjacentHTML('beforeend', '<button class="btn btn-ghost btn-sm return-parent-btn" onclick="returnToParentView()">Return</button>');
+    }
+
+    async function loadContactOperators() {
+        try {
+            const res = await API.getContactOperators();
+            contactOperators = res.data || [];
+            const select = document.getElementById('contactOperator');
+            select.innerHTML = contactOperators.length
+                ? contactOperators.map(o => `<option value="${o.id}">${esc(o.terminal)} - ${esc(o.fullName)}</option>`).join('')
+                : '<option value="">No operators available</option>';
+            renderOperatorContactInfo();
+        } catch(e) {
+            contactOperators = [];
+        }
+    }
+
+    function populateSearchTerminalSelects() {
+        const optionHtml = SEARCH_TERMINALS
+            .map(([value, label]) => `<option value="${esc(value)}">${esc(label)}</option>`)
+            .join('');
+        document.getElementById('searchOrigin').innerHTML =
+            '<option value="">Select origin city</option>' + optionHtml;
+        document.getElementById('searchDest').innerHTML =
+            '<option value="">Any destination</option>' + optionHtml;
+    }
+
+    function renderOperatorContactInfo() {
+        const id = document.getElementById('contactOperator').value;
+        const operator = contactOperators.find(o => String(o.id) === String(id));
+        const info = document.getElementById('operatorContactInfo');
+        info.innerHTML = operator
+            ? `Phone: <strong>${esc(operator.phone || 'Not available')}</strong><br>Email: ${esc(operator.email || '')}`
+            : 'Choose an operator to see contact details.';
+    }
+
+    async function sendContactMessage() {
+        hideErr('contactErr');
+        const operatorId = document.getElementById('contactOperator').value;
+        const subject = document.getElementById('contactSubject').value.trim();
+        const message = document.getElementById('contactMessage').value.trim();
+        if (!operatorId) { showErr('contactErr', 'Please choose an operator.'); return; }
+        if (!subject) { showErr('contactErr', 'Subject is required.'); return; }
+        if (!message) { showErr('contactErr', 'Message is required.'); return; }
+
+        try {
+            await API.sendPassengerContactMessage({ operatorId, subject, message });
+            document.getElementById('contactSubject').value = '';
+            document.getElementById('contactMessage').value = '';
+            showToast('Message sent.', 'success');
+            await loadContactMessages();
+        } catch(e) {
+            showErr('contactErr', e.message || 'Failed to send message.');
+        }
+    }
+
+    async function loadContactMessages() {
+        const box = document.getElementById('contactHistory');
+        if (!box) return;
+        box.innerHTML = '<div class="empty-state">Loading contact history...</div>';
+        try {
+            const res = await API.getPassengerContactMessages();
+            const rows = res.data || [];
+            box.innerHTML = rows.length ? rows.map(m => `
+                <div class="card" style="box-shadow:none;">
+                    <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+                        <div>
+                            <div style="font-weight:700;">${esc(m.subject)}</div>
+                            <div style="font-size:12px;color:var(--slate-mid);">${esc(m.operatorName)} - ${esc(m.terminal)} - ${esc(m.createdAt || '')}</div>
+                        </div>
+                        ${badge(m.status)}
+                    </div>
+                    <div style="margin-top:10px;line-height:1.45;"><strong>You wrote:</strong> ${esc(m.message)}</div>
+                    ${m.reply ? `<div class="alert alert-success show" style="margin-top:12px;margin-bottom:0;"><strong>Operator reply:</strong> ${esc(m.reply)}</div>` : ''}
+                </div>
+            `).join('') : '<div class="empty-state">No contact messages yet.</div>';
+        } catch(e) {
+            box.innerHTML = `<div class="alert alert-error show">${esc(e.message || 'Failed to load contact history.')}</div>`;
+        }
+    }
+
+    async function refreshNotifications() {
+        try {
+            const res = await API.getUnreadNotificationCount();
+            const count = res.data?.count || 0;
+            const badge = document.getElementById('notifBadge');
+            badge.textContent = count;
+            badge.style.display = count > 0 ? 'inline-block' : 'none';
+        } catch(e) {}
+    }
+
+    async function loadNotifications() {
+        const list = document.getElementById('notificationsList');
+        list.innerHTML = '<div class="empty-state">Loading messages...</div>';
+        try {
+            const res = await API.getNotifications();
+            const rows = res.data || [];
+            list.innerHTML = rows.length ? rows.map(n => `
+                <div class="card" style="box-shadow:none;border-left:4px solid ${n.read ? 'var(--border)' : 'var(--red)'};">
+                    <div style="font-size:13px;color:var(--slate-mid);margin-bottom:4px;">${esc(n.createdAt || '')}</div>
+                    <div style="font-weight:600;line-height:1.45;">${esc(n.message)}</div>
+                    ${n.read ? '' : `<button class="btn btn-sm btn-ghost" style="margin-top:10px;" onclick="markNotificationRead(${n.id})">Mark Read</button>`}
+                </div>
+            `).join('') : '<div class="empty-state">No messages.</div>';
+        } catch(e) {
+            list.innerHTML = `<div class="alert alert-error show">${esc(e.message || 'Failed to load messages.')}</div>`;
+        }
+    }
+
+    async function markNotificationRead(id) {
+        await API.markNotificationRead(id);
+        await loadNotifications();
+        await refreshNotifications();
+    }
+
+    async function markAllNotificationsRead() {
+        await API.markAllNotificationsRead();
+        await loadNotifications();
+        await refreshNotifications();
+    }
+
+    function toggleSidebar() {
+        document.getElementById('sidebar').classList.toggle('open');
+        document.getElementById('sidebarOverlay').classList.toggle('show');
+    }
+    function closeSidebar() {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('sidebarOverlay').classList.remove('show');
+    }
+
+    async function logout() {
+        try { await API.logout(); } catch(e) {}
+        window.location.href = '/index.html';
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  STEP 1 — SEARCH
+    // ══════════════════════════════════════════════════════════════
+
+    async function searchTrips() {
+        const origin = document.getElementById('searchOrigin').value;
+        const dest   = document.getElementById('searchDest').value;
+        const date   = document.getElementById('searchDate').value;
+
+        if (!origin) { showToast('Please select an origin city.', 'error'); return; }
+
+        const btn = document.getElementById('searchBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Searching…';
+
+        try {
+            const res    = await API.searchTrips({ origin, destination: dest, date });
+            const results = res.data || [];
+
+            selectedTrip = null;
+            document.getElementById('bookingCTA').style.display = 'none';
+            document.getElementById('searchResults').style.display = 'block';
+            document.getElementById('resultsLabel').textContent =
+                results.length === 0 ? 'No trips found' : `${results.length} trip${results.length > 1 ? 's' : ''} found`;
+
+            if (results.length === 0) {
+                document.getElementById('tripResultsList').innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🚌</div>
+                    <div class="empty-state-title">No trips available</div>
+                    <p>Try a different date or route.</p>
+                </div>`;
+                return;
+            }
+
+            document.getElementById('tripResultsList').innerHTML = results.map(t => `
+            <div class="trip-result" id="tr-${t.id}" onclick="selectTrip(${JSON.stringify(t).replace(/"/g,'&quot;')})">
+                <div style="flex:1;min-width:0;">
+                    <div class="trip-result-route">${esc(t.origin)} → ${esc(t.destination)}</div>
+                    <div class="trip-result-meta">
+                        📅 ${formatDt(t.departureTime)} &nbsp;·&nbsp;
+                        🕓 arrives ${formatDt(t.arrivalTime)} &nbsp;·&nbsp;
+                        ${badge(t.status)}
+                    </div>
+                </div>
+                <div>
+                    <div class="trip-result-price">${t.price} L</div>
+                    <div class="trip-result-avail">${t.availableSeats} seat${t.availableSeats !== 1 ? 's' : ''} left</div>
+                </div>
+            </div>`).join('');
+        } catch(e) {
+            showToast(e.message || 'Search failed. Try again.', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Search Trips';
+        }
+    }
+
+    function clearSearch() {
+        document.getElementById('searchOrigin').value = '';
+        document.getElementById('searchDest').value   = '';
+        document.getElementById('searchDate').value   = '';
+        document.getElementById('searchResults').style.display = 'none';
+        selectedTrip = null;
+    }
+
+    function selectTrip(trip) {
+        selectedTrip = trip;
+        document.querySelectorAll('.trip-result').forEach(el => el.classList.remove('selected'));
+        document.getElementById('tr-' + trip.id).classList.add('selected');
+        document.getElementById('bookingCTA').style.display = 'block';
+        renderSeatLimitAlert();
+        document.getElementById('bookingCTA').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function availableSeatCount() {
+        return Math.max(parseInt(selectedTrip?.availableSeats || 0), 0);
+    }
+
+    function seatWord(count) {
+        return count === 1 ? 'seat' : 'seats';
+    }
+
+    function renderSeatLimitAlert() {
+        const box = document.getElementById('seatLimitAlert');
+        if (!box || !selectedTrip) return;
+        const available = availableSeatCount();
+        if (available > 0 && available < 6) {
+            box.className = 'alert alert-info show';
+            box.textContent = `Limited availability: this trip has only ${available} ${seatWord(available)} left.`;
+        } else {
+            box.className = 'alert alert-info';
+            box.textContent = '';
+        }
+    }
+
+    function returnToSearchAfterSeatLimit() {
+        selectedTrip = null;
+        passengers = [];
+        document.querySelectorAll('.trip-result').forEach(el => el.classList.remove('selected'));
+        document.getElementById('bookingCTA').style.display = 'none';
+        showPane('pane-search');
+        setStep(1);
+        document.getElementById('searchResults')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  STEP 2 — PASSENGER DETAILS
+    // ══════════════════════════════════════════════════════════════
+
+    function goToPassengers() {
+        if (!selectedTrip) { showToast('Please select a trip first.', 'error'); return; }
+        const count = parseInt(document.getElementById('passengerCount').value);
+        const available = availableSeatCount();
+
+        if (available < count) {
+            if (available <= 0) {
+                showToast('This trip has no seats left. Please choose another trip.', 'error');
+                returnToSearchAfterSeatLimit();
+                return;
+            }
+
+            const ok = confirm(`This trip has only ${available} ${seatWord(available)} left. Do you want to book only ${available}?`);
+            if (!ok) {
+                returnToSearchAfterSeatLimit();
+                return;
+            }
+
+            document.getElementById('passengerCount').value = String(available);
+            passengers = Array.from({ length: available }, () => ({}));
+            renderPassengerForms(available);
+        } else {
+            passengers = Array.from({ length: count }, () => ({}));
+            renderPassengerForms(count);
+        }
+
+        document.getElementById('tripSummaryAlert').innerHTML =
+            `📍 <strong>${esc(selectedTrip.origin)} → ${esc(selectedTrip.destination)}</strong>
+         &nbsp;·&nbsp; 📅 ${formatDt(selectedTrip.departureTime)}
+         &nbsp;·&nbsp; 💰 ${selectedTrip.price} L/ticket`;
+
+        showPane('pane-passengers');
+        setStep(2);
+    }
+
+    function backToSearch() {
+        showPane('pane-search');
+        setStep(1);
+    }
+
+    function renderPassengerForms(count) {
+        document.getElementById('passengerForms').innerHTML = Array.from({ length: count }, (_, i) => `
+        <div class="passenger-card" id="pcard-${i}">
+            <div class="passenger-card-header">
+                <div class="passenger-card-title">Passenger ${i + 1}</div>
+                <span id="pdiscount-${i}" class="discount-badge" style="display:none;"></span>
+            </div>
+            <div class="form-row">
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="form-label">First Name <span style="color:var(--red);">*</span></label>
+                    <input class="form-control" id="pfirst-${i}" placeholder="Arjol"/>
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="form-label">Last Name <span style="color:var(--red);">*</span></label>
+                    <input class="form-control" id="plast-${i}" placeholder="Basha"/>
+                </div>
+            </div>
+            <div class="form-group" style="margin-top:12px;margin-bottom:0;">
+                <label class="form-label">Age <span style="color:var(--red);">*</span></label>
+                <input class="form-control" type="number" id="page-${i}" min="0" max="120" placeholder="e.g. 28" oninput="onAgeChange(${i})" style="max-width:120px;"/>
+                <div class="under6-warning" id="under6-${i}">
+                    ⚠ Passengers under 6 travel free but <strong>must be accompanied by an adult</strong>. Please contact the terminal operator to confirm seating.
+                </div>
+            </div>
+            <div class="form-group" style="margin-top:12px;margin-bottom:0;">
+                <label class="form-label">Special Needs <span style="color:var(--slate-mid);font-weight:400;">(optional)</span></label>
+                <input class="form-control" id="pspecial-${i}" placeholder="e.g. Wheelchair, assistance needed"/>
+            </div>
+        </div>`).join('');
+    }
+
+    function onAgeChange(i) {
+        const age  = parseInt(document.getElementById('page-' + i).value);
+        const disc = document.getElementById('pdiscount-' + i);
+        const warn = document.getElementById('under6-' + i);
+
+        if (isNaN(age) || age < 0) {
+            disc.style.display = 'none';
+            warn.style.display = 'none';
+            return;
+        }
+
+        warn.style.display = age < 6 ? 'block' : 'none';
+
+        const tier = DISCOUNT_TIERS.find(t => age >= t.min && age <= t.max);
+        if (tier && tier.pct > 0) {
+            disc.style.display = 'inline-flex';
+            disc.textContent   = tier.pct === 100
+                ? `🎁 ${tier.label} — FREE`
+                : `🏷 ${tier.label} — ${tier.pct}% off`;
+        } else {
+            disc.style.display = 'none';
+        }
+
+        updateDiscountSummary();
+    }
+
+    function updateDiscountSummary() {
+        const count = passengers.length;
+        let lines = [];
+        let total = 0;
+
+        for (let i = 0; i < count; i++) {
+            const age  = parseInt(document.getElementById('page-' + i)?.value);
+            const tier = isNaN(age) ? null : DISCOUNT_TIERS.find(t => age >= t.min && age <= t.max);
+            const pct  = tier ? tier.pct : 0;
+            const price = selectedTrip.price * (1 - pct / 100);
+            total += price;
+            lines.push(`<div class="price-row"><span>Passenger ${i+1}${!isNaN(age) ? ` (age ${age})` : ''}</span><span>${price.toFixed(0)} L${pct ? ` <small style="opacity:.6;">-${pct}%</small>` : ''}</span></div>`);
+        }
+
+        document.getElementById('discountSummary').innerHTML = `
+        <div class="price-summary">
+            ${lines.join('')}
+            <div class="price-row" style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.2);">
+                <span style="font-weight:600;">Estimated Total</span>
+                <span class="price-total">${total.toFixed(0)} L</span>
+            </div>
+        </div>`;
+    }
+
+    function updatePassengerCount() {
+        const count = parseInt(document.getElementById('passengerCount').value);
+        passengers  = Array.from({ length: count }, () => ({}));
+        renderSeatLimitAlert();
+    }
+
+    function goToPayment() {
+        // Collect & validate
+        const count = passengers.length;
+        let errors  = [];
+
+        for (let i = 0; i < count; i++) {
+            const first   = document.getElementById('pfirst-' + i).value.trim();
+            const last    = document.getElementById('plast-' + i).value.trim();
+            const age     = document.getElementById('page-' + i).value.trim();
+            const special = document.getElementById('pspecial-' + i).value.trim();
+
+            if (!first) errors.push(`Passenger ${i+1}: First name is required.`);
+            if (!last)  errors.push(`Passenger ${i+1}: Last name is required.`);
+            if (!age || isNaN(parseInt(age)) || parseInt(age) < 0)
+                errors.push(`Passenger ${i+1}: Valid age is required.`);
+
+            const parsedAge = parseInt(age);
+            if (!isNaN(parsedAge) && parsedAge < 6)
+                errors.push(`Passenger ${i+1}: Passengers under 6 must be booked through the operator. Please contact the operator for assistance.`);
+
+            passengers[i] = { firstName: first, lastName: last, age: parsedAge, specialNeeds: special };
+        }
+
+        if (errors.length > 0) { showToast(errors[0], 'error'); return; }
+
+        renderPriceSummary();
+        showPane('pane-payment');
+        setStep(3);
+    }
+
+    function backToPassengers() {
+        showPane('pane-passengers');
+        setStep(2);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  STEP 3 — PAYMENT
+    // ══════════════════════════════════════════════════════════════
+
+    function selectPayment(method) {
+        paymentMethod = method;
+        document.getElementById('opt-card').classList.toggle('selected', method === 'card');
+        document.getElementById('opt-cash').classList.toggle('selected', method === 'terminal');
+        document.getElementById('cardFields').style.display = method === 'card' ? 'block' : 'none';
+        document.getElementById('cashInfo').style.display   = method === 'terminal' ? 'block' : 'none';
+    }
+
+    function renderPriceSummary() {
+        let lines = [];
+        let total = 0;
+        passengers.forEach((p, i) => {
+            const tier  = DISCOUNT_TIERS.find(t => p.age >= t.min && p.age <= t.max);
+            const pct   = tier ? tier.pct : 0;
+            const price = selectedTrip.price * (1 - pct / 100);
+            total += price;
+            lines.push(`<div class="price-row"><span>${esc(p.firstName)} ${esc(p.lastName)} (age ${p.age})</span><span>${price.toFixed(0)} L${pct ? ` <small style="opacity:.6;margin-left:6px;">-${pct}%</small>` : ''}</span></div>`);
+        });
+
+        document.getElementById('priceSummary').innerHTML = `
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.5);margin-bottom:12px;">
+            ${esc(selectedTrip.origin)} → ${esc(selectedTrip.destination)} · ${formatDt(selectedTrip.departureTime)}
+        </div>
+        ${lines.join('')}
+        <div class="price-row" style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.2);">
+            <span style="font-weight:700;font-size:16px;">Total</span>
+            <span class="price-total">${total.toFixed(0)} L</span>
+        </div>`;
+    }
+
+    function validateCard() {
+        const name   = document.getElementById('cardName').value.trim();
+        const number = document.getElementById('cardNumber').value.replace(/\s/g,'');
+        const expiry = document.getElementById('cardExpiry').value.trim();
+        const cvv    = document.getElementById('cardCVV').value.trim();
+        if (!name)           return 'Cardholder name is required.';
+        if (number.length < 16) return 'Enter a valid 16-digit card number.';
+        if (!/^\d{2}\/\d{2}$/.test(expiry)) return 'Enter expiry as MM/YY.';
+        if (cvv.length < 3)  return 'Enter a valid 3-digit CVV.';
+        return null;
+    }
+
+    async function confirmBooking() {
+        hideErr('paymentErr');
+
+        if (paymentMethod === 'card') {
+            const cardErr = validateCard();
+            if (cardErr) { showErr('paymentErr', cardErr); return; }
+        }
+
+        const btn = document.getElementById('confirmBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Processing…';
+
+        try {
+            const payload = {
+                tripId:        selectedTrip.id,
+                paymentMethod: paymentMethod,
+                passengers:    passengers   // [{firstName, lastName, age, specialNeeds}]
+            };
+
+            const res = await API.createBooking(payload);
+            confirmedBookings = res.data || [];
+
+            // Show confirmation
+            const total = confirmedBookings.reduce((s, b) => s + parseFloat(b.finalPrice || 0), 0);
+            document.getElementById('confirmAlert').innerHTML =
+                paymentMethod === 'card'
+                    ? `✓ Payment confirmed! <strong>${confirmedBookings.length}</strong> ticket(s) booked. Total charged: <strong>${total.toFixed(0)} L</strong>`
+                    : `✓ <strong>${confirmedBookings.length}</strong> ticket(s) reserved. Please pay the driver on board. Total due: <strong>${total.toFixed(0)} L</strong>`;
+
+            renderETickets(confirmedBookings);
+            showPane('pane-confirm');
+            setStep(4);
+            await loadHistory(); // refresh history in background
+        } catch(e) {
+            const msg = e.message || '';
+            const seatMatch = msg.match(/Only\s+(\d+)\s+seat/i);
+            if (seatMatch) {
+                const available = parseInt(seatMatch[1]);
+                if (available > 0 && passengers.length > available) {
+                    const ok = confirm(`This trip has only ${available} ${seatWord(available)} left. Do you want to book only ${available}?`);
+                    if (ok) {
+                        selectedTrip.availableSeats = available;
+                        passengers = passengers.slice(0, available);
+                        document.getElementById('passengerCount').value = String(available);
+                        renderPriceSummary();
+                        setTimeout(confirmBooking, 0);
+                    } else {
+                        returnToSearchAfterSeatLimit();
+                    }
+                    return;
+                }
+            }
+            showErr('paymentErr', e.message || 'Booking failed. Please try again.');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Confirm & Book';
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  STEP 4 — E-TICKETS
+    // ══════════════════════════════════════════════════════════════
+
+    function renderETickets(bookings, container = 'eTickets') {
+        document.getElementById(container).innerHTML = bookings.map(b => buildTicketHTML(b)).join('');
+    }
+
+    function buildTicketHTML(b) {
+        const discLabel = b.discountPct > 0 ? `${b.discountPct}% discount applied` : 'Full fare';
+        return `
+    <div class="ticket-outer" style="margin-bottom:16px;">
+        <div class="ticket-body">
+            <div class="ticket-top">
+                <div>
+                    <div class="wm wm-sm"><span class="wm-al" style="color:#fff;">AL</span><span class="wm-bus">Bus</span></div>
+                    <div class="ticket-route-display" style="margin-top:8px;">${esc(b.origin)} → ${esc(b.destination)}</div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.5);">Seat</div>
+                    <div class="ticket-seat-big">${esc(b.seatNumber)}</div>
+                </div>
+            </div>
+            <hr class="ticket-divider"/>
+            <div class="ticket-details">
+                <div class="ticket-grid">
+                    <div>
+                        <div class="ticket-field-label">Passenger</div>
+                        <div class="ticket-field-value">${esc(b.firstName)} ${esc(b.lastName)}</div>
+                    </div>
+                    <div>
+                        <div class="ticket-field-label">Date & Departure</div>
+                        <div class="ticket-field-value">${formatDt(b.departureTime)}</div>
+                    </div>
+                    <div>
+                        <div class="ticket-field-label">Price Paid</div>
+                        <div class="ticket-field-value" style="color:var(--red);">${b.finalPrice} L</div>
+                    </div>
+                    <div>
+                        <div class="ticket-field-label">Discount</div>
+                        <div class="ticket-field-value">${discLabel}</div>
+                    </div>
+                    <div>
+                        <div class="ticket-field-label">Payment</div>
+                        <div class="ticket-field-value">${b.paymentMethod === 'card' ? '💳 Card' : '💵 Pay on board'}</div>
+                    </div>
+                    <div>
+                        <div class="ticket-field-label">Booking ID</div>
+                        <div class="ticket-field-value" style="color:var(--slate-mid);font-size:13px;">#${b.bookingId || b.id}</div>
+                    </div>
+                </div>
+                ${b.specialNeeds ? `<div style="margin-top:12px;font-size:12px;color:var(--warning);">⚠ Special needs: ${esc(b.specialNeeds)}</div>` : ''}
+            </div>
+            <div class="ticket-footer-bar">
+                <span>Status: <strong>${b.paymentMethod === 'card' ? 'CONFIRMED' : 'RESERVED — PAY ON BOARD'}</strong></span>
+                <span>ALBus Albania</span>
+            </div>
+        </div>
+    </div>`;
+    }
+
+    function goToHistory() {
+        showSection('history', document.querySelectorAll('.nav-item')[1]);
+    }
+
+    function startOver() {
+        selectedTrip  = null;
+        passengers    = [];
+        confirmedBookings = [];
+        paymentMethod = 'card';
+        document.getElementById('searchResults').style.display = 'none';
+        document.getElementById('passengerCount').value = '1';
+        document.getElementById('cardName').value = '';
+        document.getElementById('cardNumber').value = '';
+        document.getElementById('cardExpiry').value = '';
+        document.getElementById('cardCVV').value = '';
+        showPane('pane-search');
+        setStep(1);
+        selectPayment('card');
+        hideErr('paymentErr');
+    }
+
+    function printTickets() {
+        document.getElementById('print-area').innerHTML = document.getElementById('eTickets').innerHTML;
+        window.print();
+    }
+
+    function printModal() {
+        document.getElementById('print-area').innerHTML = document.getElementById('modalTicketContent').innerHTML;
+        window.print();
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  BOOKING HISTORY
+    // ══════════════════════════════════════════════════════════════
+
+    async function loadHistory() {
+        const list = document.getElementById('historyList');
+        list.innerHTML = '<div class="empty-state"><span class="spinner dark" style="width:24px;height:24px;"></span><p style="margin-top:10px;">Loading…</p></div>';
+
+        try {
+            const res  = await API.getMyBookings();
+            const data = res.data || [];
+            historyBookings = data;
+
+            // Stats
+            const paid     = data.filter(b => b.paymentStatus === 'paid').length;
+            const pending  = data.filter(b => b.paymentStatus === 'pending').length;
+            const upcoming = data.filter(b => b.tripStatus === 'scheduled' || b.tripStatus === 'departed').length;
+
+            document.getElementById('historyStats').innerHTML = `
+            <div class="stat-card"><div class="stat-label">Total Trips</div><div class="stat-value">${data.length}</div></div>
+            <div class="stat-card"><div class="stat-label">Paid</div><div class="stat-value" style="color:var(--success);">${paid}</div></div>
+            <div class="stat-card"><div class="stat-label">Pay on Board</div><div class="stat-value" style="color:var(--warning);">${pending}</div></div>
+            <div class="stat-card"><div class="stat-label">Upcoming</div><div class="stat-value">${upcoming}</div></div>
+        `;
+
+            renderHistoryBookings();
+            return;
+
+            if (data.length === 0) {
+                list.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🎫</div>
+                    <div class="empty-state-title">No bookings yet</div>
+                    <p>Search for trips and book your first ticket!</p>
+                </div>`;
+                return;
+            }
+
+            list.innerHTML = data.map(b => `
+            <div class="booking-history-card" onclick="openTicketModal(${JSON.stringify(b).replace(/"/g,'&quot;')})">
+                <div style="flex:1;min-width:0;">
+                    <div class="booking-history-route">${esc(b.origin)} → ${esc(b.destination)}</div>
+                    <div class="booking-history-meta">
+                        📅 ${formatDt(b.departureTime)} &nbsp;·&nbsp;
+                        🪑 Seat ${esc(b.seatNumber)} &nbsp;·&nbsp;
+                        ${b.discountPct > 0 ? `🏷 -${b.discountPct}%` : 'Full fare'}
+                    </div>
+                </div>
+                <div style="text-align:right;flex-shrink:0;">
+                    <div style="font-weight:700;color:var(--red);font-size:16px;">${b.finalPrice} L</div>
+                    <div style="margin-top:4px;">${badge(b.tripStatus)}</div>
+                    <div style="margin-top:4px;">${b.paymentMethod === 'terminal' && b.paymentStatus === 'pending'
+                ? '<span class="badge badge-warning">Pay on board</span>'
+                : badge(b.paymentStatus)}</div>
+                </div>
+            </div>`).join('');
+        } catch(e) {
+            list.innerHTML = '<div class="empty-state"><div class="empty-state-title">Failed to load bookings</div><p>Please refresh and try again.</p></div>';
+        }
+    }
+
+    function renderHistoryBookings() {
+        const list = document.getElementById('historyList');
+        const tripStatus = document.getElementById('bookingTripStatusFilter')?.value || 'all';
+        const payment = document.getElementById('bookingPaymentFilter')?.value || 'all';
+        const search = (document.getElementById('bookingSearchFilter')?.value || '').trim().toLowerCase();
+        const filtered = historyBookings.filter(b => {
+            if (tripStatus !== 'all' && String(b.tripStatus || '').toLowerCase() !== tripStatus) return false;
+            if (payment !== 'all' && String(b.paymentStatus || '').toLowerCase() !== payment) return false;
+            if (!search) return true;
+            return [b.origin, b.destination, b.seatNumber, b.firstName, b.lastName]
+                .some(v => String(v || '').toLowerCase().includes(search));
+        });
+
+        if (historyBookings.length === 0) {
+            list.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🎫</div>
+                <div class="empty-state-title">No bookings yet</div>
+                <p>Search for trips and book your first ticket!</p>
+            </div>`;
+            return;
+        }
+
+        if (filtered.length === 0) {
+            list.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-title">No bookings match this filter</div>
+                <p>Try changing the status, payment, or search text.</p>
+            </div>`;
+            return;
+        }
+
+        list.innerHTML = filtered.map(b => `
+        <div class="booking-history-card" onclick="openTicketModal(${JSON.stringify(b).replace(/"/g,'&quot;')})">
+            <div style="flex:1;min-width:0;">
+                <div class="booking-history-route">${esc(b.origin)} → ${esc(b.destination)}</div>
+                <div class="booking-history-meta">
+                    📅 ${formatDt(b.departureTime)} &nbsp;·&nbsp;
+                    💺 Seat ${esc(b.seatNumber)} &nbsp;·&nbsp;
+                    ${b.discountPct > 0 ? `🏷 -${b.discountPct}%` : 'Full fare'}
+                </div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;">
+                <div style="font-weight:700;color:var(--red);font-size:16px;">${b.finalPrice} L</div>
+                <div style="margin-top:4px;">${badge(b.tripStatus)}</div>
+                <div style="margin-top:4px;">${b.paymentMethod === 'terminal' && b.paymentStatus === 'pending'
+            ? '<span class="badge badge-warning">Pay on board</span>'
+            : badge(b.paymentStatus)}</div>
+            </div>
+        </div>`).join('');
+    }
+
+    function openTicketModal(b) {
+        document.getElementById('modalTicketContent').innerHTML = buildTicketHTML(b);
+        openModal('ticketModal');
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  STEP BAR
+    // ══════════════════════════════════════════════════════════════
+
+    function setStep(n) {
+        for (let i = 1; i <= 4; i++) {
+            const el = document.getElementById('step' + i);
+            el.className = 'step' + (i < n ? ' done' : i === n ? ' active' : '');
+        }
+    }
+
+    function showPane(id) {
+        ['pane-search','pane-passengers','pane-payment','pane-confirm'].forEach(p => {
+            document.getElementById(p).style.display = p === id ? 'block' : 'none';
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  CARD INPUT FORMATTERS
+    // ══════════════════════════════════════════════════════════════
+
+    function formatCard(input) {
+        let v = input.value.replace(/\D/g,'').substring(0,16);
+        input.value = v.replace(/(.{4})/g,'$1 ').trim();
+    }
+    function formatExpiry(input) {
+        let v = input.value.replace(/\D/g,'').substring(0,4);
+        if (v.length >= 3) v = v.substring(0,2) + '/' + v.substring(2);
+        input.value = v;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  MODALS
+    // ══════════════════════════════════════════════════════════════
+
+    function openModal(id)  { document.getElementById(id).classList.add('show'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+    document.querySelectorAll('.modal-overlay').forEach(o => {
+        o.addEventListener('click', function(e) { if (e.target === this) this.classList.remove('show'); });
+    });
+
+    // ══════════════════════════════════════════════════════════════
+    //  HELPERS
+    // ══════════════════════════════════════════════════════════════
+
+    function showErr(id, msg) {
+        const el = document.getElementById(id);
+        el.textContent = msg; el.classList.add('show');
+    }
+    function hideErr(id) {
+        const el = document.getElementById(id);
+        el.textContent = ''; el.classList.remove('show');
+    }
+
+    function esc(str) {
+        if (str == null) return '';
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function formatDt(s) {
+        if (!s) return '—';
+        return s.replace('T',' ').slice(0,16);
+    }
+
+    function todayStr() {
+        return new Date().toISOString().slice(0,10);
+    }
+
+    function badge(status) {
+        const map = {
+            scheduled: ['badge-info',   'Scheduled'],
+            departed:  ['badge-warning','Departed'],
+            arrived:   ['badge-success','Arrived'],
+            cancelled: ['badge-danger', 'Cancelled'],
+            pending:   ['badge-warning','Pending'],
+            paid:      ['badge-success','Paid'],
+            approved:  ['badge-success','Approved'],
+            open:      ['badge-warning','Open'],
+            answered:  ['badge-success','Answered'],
+        };
+        const [cls, label] = map[status?.toLowerCase()] || ['badge-info', status || '—'];
+        return `<span class="badge ${cls}">${label}</span>`;
+    }
+
+    function showToast(msg, type = 'default') {
+        const c = document.getElementById('toastContainer');
+        const t = document.createElement('div');
+        t.className = `toast ${type}`; t.textContent = msg;
+        c.appendChild(t);
+        setTimeout(() => t.remove(), 3500);
+    }
+
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.modal-overlay.show').forEach(m => m.classList.remove('show'));
+            closeSidebar();
+        }
+    });
+
+    // ── Boot ──────────────────────────────────────────────────────
+    init();
+</script>
+</body>
+</html>

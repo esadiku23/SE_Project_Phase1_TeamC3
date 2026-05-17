@@ -1,0 +1,1959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>ALBus — Operator Dashboard</title>
+    <link rel="stylesheet" href="/css/albus.css"/>
+    <style>
+        /* ── Section visibility ── */
+        .section { display: none; }
+        .section.active { display: block; }
+
+        /* ── Mobile nav ── */
+        .mobile-menu-btn {
+            display: none;
+            background: transparent;
+            border: 1px solid rgba(255,255,255,.25);
+            color: rgba(255,255,255,.85);
+            font-size: 18px;
+            width: 36px; height: 36px;
+            border-radius: 6px;
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+        }
+        .sidebar-overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,.4);
+            z-index: 49;
+        }
+        .sidebar-overlay.show { display: block; }
+
+        /* ── Form layout helpers ── */
+        .form-row   { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+        /* ── Seat map ── */
+        .seat { width: 38px; height: 38px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+        .seat.available { background: #EAF7EF; color: #1a7a4a; border: 1px solid #1a7a4a; }
+        .seat.taken     { background: #FDEAEA; color: #C0392B; border: 1px solid #C0392B; }
+
+        /* ── Toast ── */
+        .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+        .toast {
+            background: var(--slate); color: #fff;
+            padding: 12px 18px; border-radius: 10px;
+            font-size: 13px; font-weight: 500;
+            box-shadow: 0 4px 16px rgba(0,0,0,.2);
+            animation: slideIn .2s ease; max-width: 320px;
+        }
+        .toast.success { background: var(--success); }
+        .toast.error   { background: #C0392B; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        /* ── Loading spinner ── */
+        .spinner {
+            display: inline-block; width: 18px; height: 18px;
+            border: 2px solid rgba(255,255,255,.3); border-top-color: #fff;
+            border-radius: 50%; animation: spin .6s linear infinite;
+            vertical-align: middle; margin-right: 6px;
+        }
+        .spinner.dark { border-color: rgba(0,0,0,.15); border-top-color: var(--slate); }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Empty state ── */
+        .empty-state { text-align: center; padding: 40px 20px; color: var(--slate-mid); }
+        .empty-state-icon  { font-size: 36px; margin-bottom: 10px; }
+        .empty-state-title { font-family: 'Barlow Condensed', sans-serif; font-size: 20px; font-weight: 700; color: var(--black); margin-bottom: 6px; }
+
+        /* ── Pending badge on nav ── */
+        .nav-badge {
+            display: inline-block; background: var(--red);
+            color: #fff; font-size: 10px; font-weight: 700;
+            padding: 2px 6px; border-radius: 99px; margin-left: 6px; vertical-align: middle;
+        }
+
+        /* ── Dashboard cards row ── */
+        .dash-section { margin-top: 28px; }
+        .weekday-grid { display: grid; grid-template-columns: repeat(7, minmax(42px, 1fr)); gap: 8px; }
+        .weekday-grid label {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 6px;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            background: #fff;
+        }
+        .weekday-grid input { margin: 0 0 4px; display: block; width: 100%; }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .mobile-menu-btn { display: inline-flex; }
+            .dashboard {
+                grid-template-columns: 1fr;
+                grid-template-areas: "topbar" "content";
+            }
+            .sidebar {
+                display: block !important;
+                position: fixed; left: -220px; top: 0; bottom: 0;
+                width: 220px; z-index: 50;
+                transition: left .25s ease; padding-top: 72px;
+            }
+            .sidebar.open { left: 0; }
+            .content { padding: 20px 16px; }
+            .form-row   { grid-template-columns: 1fr; }
+            .form-row-3 { grid-template-columns: 1fr; }
+            .stat-grid  { grid-template-columns: repeat(2, 1fr); }
+            .page-header { flex-wrap: wrap; gap: 8px; }
+            .topbar-label { display: none; }
+            .modal { padding: 20px; }
+            th, td { padding: 8px 10px; font-size: 13px; }
+        }
+        @media (max-width: 480px) {
+            .stat-grid { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard">
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+        <button class="mobile-menu-btn" id="menuBtn" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
+        <div class="wm wm-sm"><span class="wm-al">AL</span><span class="wm-bus">Bus</span></div>
+        <span class="topbar-spacer"></span>
+        <span class="topbar-label" id="terminalLabel">Terminal</span>
+        <button class="topbar-btn" onclick="openNotifications()">Messages <span id="notifBadge" class="nav-badge" style="display:none;">0</span></button>
+        <button class="topbar-btn" id="userBtn">Operator</button>
+        <button class="topbar-btn logout" onclick="logout()">Logout</button>
+    </header>
+
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+    <!-- SIDEBAR -->
+    <nav class="sidebar" id="sidebar">
+        <button class="nav-item active" onclick="showSection('dashboard', this)">📈 Dashboard</button>
+        <button class="nav-item" onclick="showSection('departures', this)">🚌 Departures</button>
+        <button class="nav-item" onclick="showSection('weeklyTrips', this)">🔁 Weekly Trips</button>
+        <button class="nav-item" onclick="showSection('arrivals', this)">🏁 Arrivals</button>
+        <button class="nav-item" onclick="showSection('drivers', this)">🧑‍✈️ Drivers</button>
+        <button class="nav-item" onclick="showSection('bookings', this)">🎟️ Bookings</button>
+        <button class="nav-item" onclick="showSection('contacts', this)">💬 Passenger Contacts</button>
+        <button class="nav-item" onclick="showSection('requests', this)">🛣️ Route Requests <span class="nav-badge" id="pendingBadge" style="display:none;">0</span></button>
+    </nav>
+
+    <!-- CONTENT -->
+    <main class="content">
+
+        <!-- DASHBOARD -->
+        <section id="dashboard" class="section active">
+            <div class="page-header">
+                <h1 class="page-title">Dashboard</h1>
+                <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
+                    <div class="form-group" style="margin:0; min-width:180px;">
+                        <label class="form-label">Day</label>
+                        <input class="form-control" id="dashTripDateFilter" type="date" onchange="setTripDateFilter(this.value)"/>
+                    </div>
+                    <button class="btn btn-primary" onclick="openTripModal()">+ Schedule Trip</button>
+                    <button class="btn btn-ghost btn-sm" onclick="refreshAll()">↻ Refresh</button>
+                </div>
+            </div>
+            <div class="stat-grid" id="dashStats"></div>
+
+            <div class="dash-section">
+                <h2 class="section-title" style="margin-bottom:12px;">Terminal Buses</h2>
+                <div class="card">
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Plate</th><th>Model</th><th>Seats</th><th>Status</th><th>Assignment</th><th>Actions</th><th>Driver</th><th>Departure</th></tr></thead>
+                            <tbody id="busTbody"><tr><td colspan="8" style="text-align:center;padding:24px;"><span class="spinner dark"></span> Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dash-section">
+                <h2 class="section-title" style="margin-bottom:12px;">Daily Departures</h2>
+                <div class="card">
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Route</th><th>Bus</th><th>Driver</th><th>Departure</th><th>Seats</th><th>Status</th><th>Price</th></tr></thead>
+                            <tbody id="dashTripsTbody"><tr><td colspan="7" style="text-align:center;padding:24px;"><span class="spinner dark"></span> Loading…</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- DEPARTURES -->
+        <section id="departures" class="section">
+            <div class="page-header">
+                <h1 class="page-title">Departures</h1>
+                <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
+                    <div class="form-group" style="margin:0; min-width:180px;">
+                        <label class="form-label">Day</label>
+                        <input class="form-control" id="departureTripDateFilter" type="date" onchange="setTripDateFilter(this.value)"/>
+                    </div>
+                    <button class="btn btn-primary" onclick="openTripModal()">+ Schedule Trip</button>
+                </div>
+            </div>
+            <div class="alert alert-info show" style="margin-bottom:16px;">
+                Trips departing <strong>from</strong> your terminal. You have full management control.
+            </div>
+            <div class="card">
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Route</th><th>Bus</th><th>Driver</th><th>Departure</th><th>Arrival</th><th>Seats</th><th>Status</th><th>Price</th><th>Actions</th></tr></thead>
+                        <tbody id="depTbody"><tr><td colspan="9" style="text-align:center;padding:24px;"><span class="spinner dark"></span> Loading…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- WEEKLY TRIPS -->
+        <section id="weeklyTrips" class="section">
+            <div class="page-header">
+                <h1 class="page-title">Weekly Trips</h1>
+                <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
+                    <div class="form-group" style="margin:0; min-width:180px;">
+                        <label class="form-label">Week</label>
+                        <input class="form-control" id="templateWeekStart" type="date"/>
+                    </div>
+                    <button class="btn btn-primary" onclick="openTemplateModal()">+ Add Weekly Trip</button>
+                </div>
+            </div>
+            <div class="alert alert-info show" style="margin-bottom:16px;">
+                Save regular trips once, then generate the selected week when you need them.
+            </div>
+            <div class="card">
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Route</th><th>Bus</th><th>Driver</th><th>Days</th><th>Time</th><th>Price</th><th>Actions</th></tr></thead>
+                        <tbody id="templatesTbody"><tr><td colspan="7" style="text-align:center;padding:24px;"><span class="spinner dark"></span> Loading...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ARRIVALS -->
+        <section id="arrivals" class="section">
+            <div class="page-header">
+                <h1 class="page-title">Arrivals</h1>
+                <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
+                    <div class="form-group" style="margin:0; min-width:180px;">
+                        <label class="form-label">Day</label>
+                        <input class="form-control" id="arrivalTripDateFilter" type="date" onchange="setArrivalDateFilter(this.value)"/>
+                    </div>
+                    <div class="form-group" style="margin:0; min-width:220px;">
+                        <label class="form-label">Origin</label>
+                        <select class="form-control" id="arrivalOriginFilter" onchange="setArrivalOriginFilter(this.value)">
+                            <option value="all">All origins</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="alert alert-info show" style="margin-bottom:16px;">
+                Trips arriving <strong>at</strong> your terminal. Read-only — managed by the origin terminal.
+            </div>
+            <div class="card">
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Route</th><th>Driver</th><th>Departure</th><th>Arrival</th><th>Seats</th><th>Status</th></tr></thead>
+                        <tbody id="arrTbody"><tr><td colspan="6" style="text-align:center;padding:24px;"><span class="spinner dark"></span> Loading…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- DRIVERS -->
+        <section id="drivers" class="section">
+            <div class="page-header">
+                <h1 class="page-title">Drivers</h1>
+                <button class="btn btn-primary" onclick="openDriverModal()">+ Add Driver</button>
+            </div>
+            <div class="card">
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Current Assignment</th></tr></thead>
+                        <tbody id="driversTbody"><tr><td colspan="4" style="text-align:center;padding:24px;"><span class="spinner dark"></span> Loading...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- BOOKINGS -->
+        <section id="bookings" class="section">
+            <div class="page-header">
+                <h1 class="page-title">Bookings</h1>
+                <div class="form-group" style="margin:0; min-width:180px;">
+                    <label class="form-label">Day</label>
+                    <input class="form-control" id="bookingTripDateFilter" type="date" onchange="setTripDateFilter(this.value)"/>
+                </div>
+            </div>
+            <div class="alert alert-info show" style="margin-bottom:16px;">Select a trip to view its bookings. Read-only.</div>
+            <div class="form-group" style="max-width:400px; margin-bottom:16px;">
+                <label class="form-label">Select Trip</label>
+                <select class="form-control" id="bookingTripSelect" onchange="loadBookings()">
+                    <option value="">— select a trip —</option>
+                </select>
+            </div>
+            <div class="card">
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Passenger</th><th>Seat</th><th>Discount</th><th>Price</th><th>Payment</th><th>Status</th></tr></thead>
+                        <tbody id="bookingsTbody"><tr><td colspan="6" style="text-align:center;color:#888;padding:24px;">Select a trip above.</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="contacts" class="section">
+            <div class="page-header">
+                <h1 class="page-title">Passenger Contact History</h1>
+                <button class="btn btn-ghost btn-sm" onclick="loadPassengerContacts()">Refresh</button>
+            </div>
+            <div class="card">
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Passenger</th><th>Subject</th><th>Message</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+                        <tbody id="contactsTbody"><tr><td colspan="6" style="text-align:center;padding:24px;"><span class="spinner dark"></span> Loading...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ROUTE REQUESTS -->
+        <section id="requests" class="section">
+            <div class="page-header"><h1 class="page-title">Route Requests</h1></div>
+
+            <h2 class="section-title" style="margin-bottom:8px;">Incoming Trip Requests</h2>
+            <div class="alert alert-info show" style="margin-bottom:12px;">Approve or reject trip requests from other terminals that need your destination terminal.</div>
+            <div class="card" style="margin-bottom:24px;">
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>From Terminal</th><th>Trip</th><th>Requested Time</th><th>Distance</th><th>Status</th><th>Actions</th></tr></thead>
+                        <tbody id="incomingTbody"><tr><td colspan="6" style="text-align:center;padding:24px;"><span class="spinner dark"></span> Loading…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <h2 class="section-title" style="margin-bottom:8px;">Outgoing Trip Requests</h2>
+            <div class="card">
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Trip</th><th>Requested Time</th><th>Distance</th><th>Status</th><th>Reason</th></tr></thead>
+                        <tbody id="outgoingTbody"><tr><td colspan="5" style="text-align:center;padding:24px;"><span class="spinner dark"></span> Loading…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<!-- ══════════════════ MODALS ══════════════════ -->
+
+<!-- WEEKLY TRIP TEMPLATE MODAL -->
+<div class="modal-overlay" id="templateModal">
+    <div class="modal" style="width:520px;">
+        <h2 class="modal-title">Add Weekly Trip</h2>
+        <div class="form-group">
+            <label class="form-label">Route</label>
+            <select class="form-control" id="templateRoute" onchange="syncTemplateArrivalTime()"><option value="">Select route</option></select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Driver</label>
+            <select class="form-control" id="templateDriver"><option value="">Select driver</option></select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Bus</label>
+            <select class="form-control" id="templateBus"><option value="">Select bus</option></select>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Departure</label>
+                <input class="form-control" type="time" id="templateDeparture" onchange="syncTemplateArrivalTime()"/>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Arrival</label>
+                <input class="form-control" type="time" id="templateArrival"/>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Runs On</label>
+            <div class="weekday-grid" id="templateDays">
+                <label><input type="checkbox" value="1"/>Mon</label>
+                <label><input type="checkbox" value="2"/>Tue</label>
+                <label><input type="checkbox" value="3"/>Wed</label>
+                <label><input type="checkbox" value="4"/>Thu</label>
+                <label><input type="checkbox" value="5"/>Fri</label>
+                <label><input type="checkbox" value="6"/>Sat</label>
+                <label><input type="checkbox" value="7"/>Sun</label>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Price (L)</label>
+            <input class="form-control" type="number" id="templatePrice" min="0" placeholder="e.g. 800"/>
+        </div>
+        <div class="alert alert-error" id="templateErr"></div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('templateModal')">Return</button>
+            <button class="btn btn-primary" id="saveTemplateBtn" onclick="saveTemplate()">Save Weekly Trip</button>
+        </div>
+    </div>
+</div>
+
+<!-- TRIP MODAL -->
+<div class="modal-overlay" id="tripModal">
+    <div class="modal" style="width:520px;">
+        <h2 class="modal-title" id="tripModalTitle">Schedule New Trip</h2>
+        <input type="hidden" id="tripId"/>
+        <div class="form-group">
+            <label class="form-label">Route</label>
+            <select class="form-control" id="tripRoute" onchange="syncArrivalDate({target:{id:'tripRoute'}}); refreshAvailableTripResources();"><option value="">Select route</option></select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Driver</label>
+            <select class="form-control" id="tripDriver"><option value="">Select driver</option></select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Bus</label>
+            <select class="form-control" id="tripBus" onchange="syncTripBusSeats()"><option value="">Select bus</option></select>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Departure Time</label>
+                <input class="form-control" type="datetime-local" id="tripDeparture" onchange="syncArrivalDate(); refreshAvailableTripResources();"/>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Arrival Time</label>
+                <input class="form-control" type="datetime-local" id="tripArrival" onchange="refreshAvailableTripResources();"/>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Total Seats</label>
+                <input class="form-control" type="number" id="tripSeats" value="" min="1" max="100" readonly/>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Price (L)</label>
+                <input class="form-control" type="number" id="tripPrice" min="0" placeholder="e.g. 800"/>
+            </div>
+        </div>
+        <div class="alert alert-error" id="tripErr"></div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('tripModal')">Return</button>
+            <button class="btn btn-primary" id="saveTripBtn" onclick="saveTrip()">Save Trip</button>
+        </div>
+    </div>
+</div>
+
+<!-- SEAT MAP MODAL -->
+<div class="modal-overlay" id="seatModal">
+    <div class="modal" style="width:520px;">
+        <h2 class="modal-title">Seat Map</h2>
+        <p id="seatInfo" style="font-size:13px;color:var(--slate-mid);margin-bottom:8px;"></p>
+        <div id="seatGrid" class="seat-grid"></div>
+        <div style="display:flex;gap:16px;margin-top:16px;font-size:12px;color:var(--slate-mid);">
+            <span><span style="display:inline-block;width:14px;height:14px;background:#EAF7EF;border:1px solid #1a7a4a;border-radius:3px;margin-right:4px;"></span>Available</span>
+            <span><span style="display:inline-block;width:14px;height:14px;background:#FDEAEA;border:1px solid #C0392B;border-radius:3px;margin-right:4px;"></span>Taken</span>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-primary" onclick="closeModal('seatModal')">Return</button>
+        </div>
+    </div>
+</div>
+
+<!-- STATUS MODAL -->
+<div class="modal-overlay" id="statusModal">
+    <div class="modal" style="width:380px;">
+        <h2 class="modal-title">Update Trip Status</h2>
+        <input type="hidden" id="statusTripId"/>
+        <div class="form-group">
+            <label class="form-label">New Status</label>
+            <select class="form-control" id="statusSelect"></select>
+        </div>
+        <div class="alert alert-error" id="statusErr"></div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('statusModal')">Return</button>
+            <button class="btn btn-primary" id="saveStatusBtn" onclick="saveStatus()">Update</button>
+        </div>
+    </div>
+</div>
+
+<!-- ROUTE MODAL -->
+<div class="modal-overlay" id="routeModal">
+    <div class="modal" style="width:420px;">
+        <h2 class="modal-title" id="routeModalTitle">New Route</h2>
+        <input type="hidden" id="routeId"/>
+        <div class="form-group">
+            <label class="form-label">Origin (your terminal)</label>
+            <input class="form-control" id="routeOrigin" disabled/>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Destination</label>
+            <select class="form-control" id="routeDestination">
+                <option value="">Select destination city</option>
+                <option>Tiranë Terminali Veri-Jug</option><option>Tiranë Terminali Lindor</option><option>Durrës</option><option>Shkodër</option>
+                <option>Vlorë</option><option>Gjirokastër</option><option>Korçë</option>
+                <option>Elbasan</option><option>Berat</option><option>Fier</option>
+                <option>Lushnjë</option><option>Kavajë</option><option>Pogradec</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Distance (km)</label>
+            <input class="form-control" type="number" id="routeDistance" min="1" placeholder="e.g. 120"/>
+        </div>
+        <div class="alert alert-error" id="routeErr"></div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('routeModal')">Return</button>
+            <button class="btn btn-primary" id="saveRouteBtn" onclick="saveRoute()">Save Route</button>
+        </div>
+    </div>
+</div>
+
+<!-- DRIVER MODAL -->
+<div class="modal-overlay" id="driverModal">
+    <div class="modal" style="width:420px;">
+        <h2 class="modal-title">Add Driver</h2>
+        <div class="form-group">
+            <label class="form-label">Full Name</label>
+            <input class="form-control" id="driverName" placeholder="e.g. Blerim Duka"/>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Email</label>
+            <input class="form-control" type="email" id="driverEmail" placeholder="blerim.duka@albus.al"/>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Password</label>
+            <input class="form-control" type="password" id="driverPassword" placeholder="Minimum 6 characters"/>
+            <span class="form-hint">Driver will use this to log in.</span>
+        </div>
+        <div class="alert alert-error" id="driverErr"></div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('driverModal')">Return</button>
+            <button class="btn btn-primary" id="saveDriverBtn" onclick="saveDriver()">Add Driver</button>
+        </div>
+    </div>
+</div>
+
+<!-- REJECT MODAL -->
+<div class="modal-overlay" id="rejectModal">
+    <div class="modal" style="width:400px;">
+        <h2 class="modal-title">Reject Route Request</h2>
+        <input type="hidden" id="rejectRequestId"/>
+        <div class="form-group">
+            <label class="form-label">Reason <span style="color:var(--red);">*</span></label>
+            <input class="form-control" id="rejectReason" placeholder="e.g. Terminal at capacity"/>
+        </div>
+        <div class="alert alert-error" id="rejectErr"></div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('rejectModal')">Return</button>
+            <button class="btn btn-primary" id="confirmRejectBtn" onclick="confirmReject()">Reject Request</button>
+        </div>
+    </div>
+</div>
+
+<!-- CONTACT REPLY MODAL -->
+<div class="modal-overlay" id="contactReplyModal">
+    <div class="modal" style="width:520px;">
+        <h2 class="modal-title">Reply to Passenger</h2>
+        <input type="hidden" id="contactReplyId"/>
+        <div class="alert alert-info show" id="contactReplySummary"></div>
+        <div class="form-group">
+            <label class="form-label">Reply</label>
+            <textarea class="form-control" id="contactReplyText" rows="4" placeholder="Write your answer"></textarea>
+        </div>
+        <div class="alert alert-error" id="contactReplyErr"></div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('contactReplyModal')">Return</button>
+            <button class="btn btn-primary" onclick="sendContactReply()" id="sendContactReplyBtn">Send Reply</button>
+        </div>
+    </div>
+</div>
+
+<!-- NOTIFICATIONS MODAL -->
+<div class="modal-overlay" id="notificationsModal">
+    <div class="modal" style="width:520px;">
+        <h2 class="modal-title">Messages</h2>
+        <div id="notificationsList" style="display:flex;flex-direction:column;gap:10px;"></div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="markAllNotificationsRead()">Mark All Read</button>
+            <button class="btn btn-primary" onclick="closeModal('notificationsModal')">Return</button>
+        </div>
+    </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="/js/api.js"></script>
+<script>
+    /* ════════════════════════════════════════════════
+       ALBus Operator Dashboard
+       ════════════════════════════════════════════════ */
+
+    let me       = {};
+    let trips    = [];
+    let arrivals = [];
+    let routes   = [];
+    let drivers  = [];
+    let buses    = [];
+    let incoming = [];
+    let outgoing = [];
+    let tripTemplates = [];
+    let passengerContacts = [];
+    let tripDurationMinutes = null;
+    let editingTripRouteId = null;
+    let tripDateFilter = todayDate();
+    let arrivalDateFilter = todayDate();
+    let arrivalOriginFilter = 'all';
+    let sectionHistory = [];
+
+    // ── Init ──────────────────────────────────────────────────────
+    async function init() {
+        try {
+            const res = await API.me();
+            me = res.data;
+            if (me.role !== 'operator') { window.location.href = '/index.html'; return; }
+            document.getElementById('userBtn').textContent       = me.fullName || 'Operator';
+            setTerminalLabel(me.terminalName || me.terminalCity);
+            await loadTerminalLabel();
+            syncTripDateInputs();
+            syncArrivalDateInput();
+            document.getElementById('templateWeekStart').value = todayDate();
+            await refreshAll();
+        } catch(e) {
+            window.location.href = '/index.html';
+        }
+    }
+
+    async function refreshAll() {
+        await Promise.allSettled([
+            loadDepartures(),
+            loadArrivals(),
+            loadRoutes(),
+            loadDrivers(),
+            loadTerminalBuses(),
+            loadTripTemplates(),
+            loadRequests(),
+            loadPassengerContacts(),
+            refreshNotifications()
+        ]);
+        renderDashboard();
+    }
+
+    async function refreshNotifications() {
+        try {
+            const res = await API.getUnreadNotificationCount();
+            const count = res.data?.count || 0;
+            const badge = document.getElementById('notifBadge');
+            badge.textContent = count;
+            badge.style.display = count > 0 ? 'inline-block' : 'none';
+        } catch(e) {}
+    }
+
+    async function openNotifications() {
+        const list = document.getElementById('notificationsList');
+        list.innerHTML = '<div class="empty-state">Loading messages...</div>';
+        openModal('notificationsModal');
+        try {
+            const res = await API.getNotifications();
+            const rows = res.data || [];
+            list.innerHTML = rows.length ? rows.map(n => `
+                <div class="card" style="box-shadow:none;border-left:4px solid ${n.read ? 'var(--border)' : 'var(--red)'};">
+                    <div style="font-size:13px;color:var(--slate-mid);margin-bottom:4px;">${esc(n.createdAt || '')}</div>
+                    <div style="font-size:14px;line-height:1.45;">${esc(n.message)}</div>
+                    ${n.read ? '' : `<button class="btn btn-sm btn-ghost" style="margin-top:10px;" onclick="markNotificationRead(${n.id})">Mark Read</button>`}
+                </div>
+            `).join('') : '<div class="empty-state">No messages.</div>';
+        } catch(e) {
+            list.innerHTML = `<div class="alert alert-error show">${esc(e.message || 'Failed to load messages.')}</div>`;
+        }
+    }
+
+    async function markNotificationRead(id) {
+        await API.markNotificationRead(id);
+        await openNotifications();
+        await refreshNotifications();
+    }
+
+    async function markAllNotificationsRead() {
+        await API.markAllNotificationsRead();
+        await openNotifications();
+        await refreshNotifications();
+    }
+
+    // ── Section Navigation ────────────────────────────────────────
+    function showSection(id, btn, returning = false) {
+        const current = document.querySelector('.section.active')?.id;
+        if (!returning && current && current !== id) sectionHistory.push(current);
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if (btn) btn.classList.add('active');
+        syncReturnButton(id);
+        if (id === 'contacts') loadPassengerContacts();
+        if (id === 'weeklyTrips') loadTripTemplates();
+        closeSidebar();
+    }
+
+    function returnToParentView() {
+        const previous = sectionHistory.pop() || 'dashboard';
+        showSection(previous, document.querySelector(`[onclick*="${previous}"]`), true);
+    }
+
+    function syncReturnButton(id) {
+        document.querySelectorAll('.return-parent-btn').forEach(b => b.remove());
+        if (id === 'dashboard') return;
+        const header = document.querySelector(`#${id} .page-header`);
+        if (!header) return;
+        header.insertAdjacentHTML('beforeend', '<button class="btn btn-ghost btn-sm return-parent-btn" onclick="returnToParentView()">Return</button>');
+    }
+
+    // ── Mobile sidebar ────────────────────────────────────────────
+    function toggleSidebar() {
+        document.getElementById('sidebar').classList.toggle('open');
+        document.getElementById('sidebarOverlay').classList.toggle('show');
+    }
+    function closeSidebar() {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('sidebarOverlay').classList.remove('show');
+    }
+
+    // ── Logout ────────────────────────────────────────────────────
+    async function logout() {
+        try { await API.logout(); } catch(e) {}
+        window.location.href = '/index.html';
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  DASHBOARD
+    // ══════════════════════════════════════════════════════════════
+
+    function renderDashboard() {
+        const dailyTrips = tripsForSelectedDay();
+        const scheduled = dailyTrips.filter(t => t.status === 'scheduled').length;
+        const needsReassignment = dailyTrips.filter(t => t.status === 'needs_reassignment').length;
+        const pending   = incoming.filter(r => r.status === 'pending').length;
+
+        document.getElementById('dashStats').innerHTML = `
+        <div class="stat-card"><div class="stat-label">Total Trips</div><div class="stat-value">${dailyTrips.length}</div></div>
+        <div class="stat-card"><div class="stat-label">Scheduled</div><div class="stat-value">${scheduled}</div></div>
+        <div class="stat-card"><div class="stat-label">Needs Reassignment</div><div class="stat-value" style="color:${needsReassignment>0?'var(--red)':'inherit'};">${needsReassignment}</div></div>
+        <div class="stat-card"><div class="stat-label">Drivers</div><div class="stat-value">${drivers.length}</div></div>
+        <div class="stat-card"><div class="stat-label">Pending Requests</div><div class="stat-value" style="color:${pending>0?'var(--red)':'inherit'};">${pending}</div></div>
+    `;
+        renderTerminalBuses();
+
+        // Update pending badge on sidebar
+        const badge = document.getElementById('pendingBadge');
+        if (pending > 0) { badge.style.display = 'inline-block'; badge.textContent = pending; }
+        else             { badge.style.display = 'none'; }
+
+        const recent = dailyTrips.slice(0, 6);
+        document.getElementById('dashTripsTbody').innerHTML = recent.length
+            ? recent.map(t => `
+            <tr>
+                <td>${esc(t.origin)} to ${esc(t.destination)}</td>
+                <td>${esc(t.busPlateNumber || '')}</td>
+                <td>${esc(t.driverName || '—')}</td>
+                <td>${formatDt(t.departureTime)}</td>
+                <td>${availableSeatCount(t)}/${t.totalSeats}</td>
+                <td>${badge2(t.status)}</td>
+                <td>${t.price} L</td>
+            </tr>`).join('')
+            : '<tr><td colspan="7" style="text-align:center;color:#888;padding:20px;">No trips for this day.</td></tr>';
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  DEPARTURES
+    // ══════════════════════════════════════════════════════════════
+
+    async function loadDepartures() {
+        try {
+            const res = await API.getDepartures();
+            trips = res.data || [];
+            useFirstTripDateWhenCurrentDayIsEmpty();
+            renderDepartures();
+            populateBookingSelect();
+        } catch(e) { trips = []; }
+    }
+
+    function renderDepartures() {
+        const dailyTrips = tripsForSelectedDay();
+        document.getElementById('depTbody').innerHTML = dailyTrips.length
+            ? dailyTrips.map(t => `
+            <tr>
+                <td>${esc(t.origin)} to ${esc(t.destination)}</td>
+                <td>${esc(t.busPlateNumber || '')}</td>
+                <td>${esc(t.driverName || '—')}</td>
+                <td>${formatDt(t.departureTime)}</td>
+                <td>${formatDt(t.arrivalTime)}</td>
+                <td>${availableSeatCount(t)}/${t.totalSeats}</td>
+                <td>${badge2(t.status)}</td>
+                <td>${t.price} L</td>
+                <td>
+                    <button class="btn btn-sm btn-secondary" onclick="openSeatMap(${t.id},${t.totalSeats})" title="View Seat Map">Seats</button>
+                    <button class="btn btn-sm btn-secondary" onclick="openBookingsForTrip(${t.id})" title="View Bookings">Bookings (${availableSeatCount(t)} left)</button>
+                    ${canChangeTripStatus(t) ? `<button class="btn btn-sm btn-ghost" onclick="openStatusModal(${t.id},'${esc(t.status)}')" title="Change Status">Status</button>` : ''}
+                    ${canEditTrip(t) ? `<button class="btn btn-sm btn-primary" onclick='openTripModal(${JSON.stringify(t)})' title="Edit Trip">Edit</button>` : ''}
+                </td>
+            </tr>`).join('')
+            : '<tr><td colspan="9" style="text-align:center;color:#888;padding:24px;">No departures for this day.</td></tr>';
+    }
+
+    function setTripDateFilter(value) {
+        tripDateFilter = value || todayDate();
+        syncTripDateInputs();
+        renderDashboard();
+        renderDepartures();
+        populateBookingSelect();
+        loadTerminalBuses();
+    }
+
+    function syncTripDateInputs() {
+        ['dashTripDateFilter', 'departureTripDateFilter', 'bookingTripDateFilter'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = tripDateFilter;
+        });
+    }
+
+    function tripsForSelectedDay() {
+        return trips.filter(t => tripDate(t.departureTime) === tripDateFilter);
+    }
+
+    function useFirstTripDateWhenCurrentDayIsEmpty() {
+        if (!trips.length || tripsForSelectedDay().length) return;
+        const firstTripDate = trips
+            .map(t => tripDate(t.departureTime))
+            .filter(Boolean)
+            .sort()[0];
+        if (!firstTripDate) return;
+        tripDateFilter = firstTripDate;
+        syncTripDateInputs();
+    }
+
+    function tripDate(s) {
+        return s ? s.replace('T', ' ').slice(0, 10) : '';
+    }
+
+    async function loadTripTemplates() {
+        try {
+            const res = await API.getTripTemplates();
+            tripTemplates = res.data || [];
+            renderTripTemplates();
+        } catch(e) {
+            tripTemplates = [];
+            const tbody = document.getElementById('templatesTbody');
+            if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;padding:24px;">Failed to load weekly trips.</td></tr>';
+        }
+    }
+
+    function renderTripTemplates() {
+        const tbody = document.getElementById('templatesTbody');
+        if (!tbody) return;
+        tbody.innerHTML = tripTemplates.length
+            ? tripTemplates.map(t => `
+            <tr>
+                <td>${esc(t.origin)} to ${esc(t.destination)}</td>
+                <td>${esc(t.busPlateNumber || '')}<div style="font-size:12px;color:var(--slate-mid);">${esc(t.busModel || '')}</div></td>
+                <td>${esc(t.driverName || '')}</td>
+                <td>${formatTemplateDays(t.daysOfWeek)}</td>
+                <td>${esc(t.departureTime)} - ${esc(t.arrivalTime)}</td>
+                <td>${t.price} L</td>
+                <td>
+                    <button class="btn btn-sm btn-primary" onclick="generateTemplate(${t.id})">Generate Week</button>
+                    <button class="btn btn-sm btn-ghost" onclick="deleteTemplate(${t.id})">Remove</button>
+                </td>
+            </tr>`).join('')
+            : '<tr><td colspan="7" style="text-align:center;color:#888;padding:24px;">No weekly trips yet.</td></tr>';
+    }
+
+    async function openTemplateModal() {
+        hideErr('templateErr');
+        try {
+            await loadRoutes();
+            if (!drivers.length) await loadDrivers();
+            if (!buses.length) await loadTerminalBuses();
+        } catch(e) {}
+        populateTemplateRouteSelect();
+        populateTemplateDriverSelect();
+        populateTemplateBusSelect();
+        document.getElementById('templateDeparture').value = '';
+        document.getElementById('templateArrival').value = '';
+        document.getElementById('templatePrice').value = '';
+        document.querySelectorAll('#templateDays input').forEach(cb => cb.checked = Number(cb.value) <= 5);
+        openModal('templateModal');
+        setBtnLoading('saveTemplateBtn', false, 'Save Weekly Trip');
+    }
+
+    function populateTemplateRouteSelect() {
+        const items = uniqueRoutes(routes);
+        const select = document.getElementById('templateRoute');
+        select.innerHTML = items.length
+            ? '<option value="">Select route</option>' +
+              items.map(r => `<option value="${r.id}">${esc(r.origin)} to ${esc(r.destination)}</option>`).join('')
+            : '<option value="">No routes available</option>';
+    }
+
+    function syncTemplateArrivalTime() {
+        const departure = document.getElementById('templateDeparture').value;
+        const arrivalInput = document.getElementById('templateArrival');
+        const duration = selectedTemplateRouteDurationMinutes();
+        if (!departure || !duration) return;
+        arrivalInput.value = addMinutesToClock(departure, duration);
+    }
+
+    function selectedTemplateRouteDurationMinutes() {
+        const routeId = document.getElementById('templateRoute')?.value;
+        const route = routes.find(r => String(r.id) === String(routeId));
+        const distance = parseInt(route?.distanceKm || 0);
+        if (!distance || distance <= 0) return null;
+        return Math.ceil(distance) + 30;
+    }
+
+    function addMinutesToClock(clock, minutes) {
+        const parts = String(clock).split(':').map(Number);
+        if (parts.length < 2 || parts.some(Number.isNaN)) return '';
+        const total = (parts[0] * 60 + parts[1] + minutes) % (24 * 60);
+        const hour = Math.floor(total / 60);
+        const minute = total % 60;
+        return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    }
+
+    function populateTemplateDriverSelect() {
+        document.getElementById('templateDriver').innerHTML =
+            '<option value="">Select driver</option>' +
+            drivers.map(d => `<option value="${d.id}">${esc(d.fullName)}${d.availability === 'Available' ? '' : ` (${esc(d.availability || 'In Service')})`}</option>`).join('');
+    }
+
+    function populateTemplateBusSelect() {
+        const selectable = buses.filter(b => b.active !== false && b.status === 'Available');
+        document.getElementById('templateBus').innerHTML =
+            '<option value="">Select bus</option>' +
+            selectable.map(b => `<option value="${b.id}">${esc(b.plateNumber)} Â· ${esc(b.model)} Â· ${b.seatCount} seats</option>`).join('');
+    }
+
+    async function saveTemplate() {
+        const routeId = document.getElementById('templateRoute').value;
+        const driverId = document.getElementById('templateDriver').value;
+        const busId = document.getElementById('templateBus').value;
+        const departureTime = document.getElementById('templateDeparture').value;
+        const arrivalTime = document.getElementById('templateArrival').value;
+        const price = document.getElementById('templatePrice').value;
+        const daysOfWeek = Array.from(document.querySelectorAll('#templateDays input:checked')).map(cb => cb.value).join(',');
+
+        if (!routeId) { showErr('templateErr', 'Please select a route.'); return; }
+        if (!driverId) { showErr('templateErr', 'Please select a driver.'); return; }
+        if (!busId) { showErr('templateErr', 'Please select a bus.'); return; }
+        if (!departureTime || !arrivalTime) { showErr('templateErr', 'Please enter departure and arrival time.'); return; }
+        if (arrivalTime <= departureTime) { showErr('templateErr', 'Arrival must be after departure.'); return; }
+        if (!daysOfWeek) { showErr('templateErr', 'Select at least one day.'); return; }
+        if (!price || price <= 0) { showErr('templateErr', 'Please enter a valid price.'); return; }
+
+        setBtnLoading('saveTemplateBtn', true);
+        try {
+            await API.createTripTemplate({ routeId, driverId, busId, departureTime, arrivalTime, daysOfWeek, price });
+            closeModal('templateModal');
+            showToast('Weekly trip saved.', 'success');
+            await loadTripTemplates();
+        } catch(e) {
+            showErr('templateErr', e.message || 'Failed to save weekly trip.');
+        } finally {
+            setBtnLoading('saveTemplateBtn', false, 'Save Weekly Trip');
+        }
+    }
+
+    async function generateTemplate(id) {
+        const weekStart = document.getElementById('templateWeekStart').value || todayDate();
+        if (!confirm('Generate this weekly trip for the selected week?')) return;
+        try {
+            const res = await API.generateTripTemplate(id, weekStart);
+            showToast(res.data?.message || 'Weekly trip generated.', 'success');
+            await Promise.all([loadDepartures(), loadRequests(), loadTerminalBuses()]);
+            renderDashboard();
+        } catch(e) {
+            showToast(e.message || 'Failed to generate weekly trip.', 'error');
+        }
+    }
+
+    async function deleteTemplate(id) {
+        if (!confirm('Remove this weekly trip template?')) return;
+        try {
+            await API.deleteTripTemplate(id);
+            showToast('Weekly trip removed.', 'success');
+            await loadTripTemplates();
+        } catch(e) {
+            showToast(e.message || 'Failed to remove weekly trip.', 'error');
+        }
+    }
+
+    function formatTemplateDays(days) {
+        const names = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
+        return String(days || '').split(',').filter(Boolean).map(d => names[d] || d).join(', ') || 'â€”';
+    }
+
+    async function loadTerminalBuses() {
+        try {
+            const res = await API.getTerminalBuses(tripDateFilter);
+            buses = res.data || [];
+            renderTerminalBuses();
+            if (document.getElementById('tripModal')?.classList.contains('show')) populateBusSelect(document.getElementById('tripBus').value);
+            if (document.getElementById('templateModal')?.classList.contains('show')) populateTemplateBusSelect();
+        } catch(e) {
+            buses = [];
+            renderTerminalBuses();
+        }
+    }
+
+    async function loadTerminalLabel() {
+        try {
+            const res = await API.getOperatorTerminal();
+            const terminal = res.data || {};
+            me.terminalName = terminal.terminalName || terminal.name || me.terminalName;
+            me.terminalCity = terminal.city || me.terminalCity;
+            setTerminalLabel(me.terminalName || me.terminalCity);
+        } catch(e) {
+            setTerminalLabel(me.terminalName || me.terminalCity);
+        }
+    }
+
+    function setTerminalLabel(label) {
+        document.getElementById('terminalLabel').textContent = label && label.trim() ? label : 'Terminal';
+    }
+
+    function renderTerminalBuses() {
+        const tbody = document.getElementById('busTbody');
+        if (!tbody) return;
+        tbody.innerHTML = buses.length
+            ? buses.map(b => `
+            <tr>
+                <td>${esc(b.plateNumber)}</td>
+                <td>${esc(b.model)}</td>
+                <td>${b.seatCount}</td>
+                <td>${badge2(b.status)}</td>
+                <td>${esc(b.route || 'Unassigned')}</td>
+                <td>
+                    <select class="form-control" style="min-width:150px;" onchange="updateBusStatus(${b.id}, this.value)">
+                        <option value="available" ${b.status === 'Available' ? 'selected' : ''}>Available</option>
+                        <option value="in_service" ${b.status === 'In Service' ? 'selected' : ''}>In Service</option>
+                        <option value="maintenance" ${b.status === 'Under Maintenance' ? 'selected' : ''}>Under Maintenance</option>
+                    </select>
+                </td>
+                <td>${esc(b.driverName || '—')}</td>
+                <td>${b.departureTime ? formatDt(b.departureTime) : '—'}</td>
+            </tr>`).join('')
+            : '<tr><td colspan="8" style="text-align:center;color:#888;padding:24px;">No buses are assigned to this terminal.</td></tr>';
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  ARRIVALS
+    // ══════════════════════════════════════════════════════════════
+
+    async function updateBusStatus(busId, status) {
+        try {
+            const res = await API.updateOperatorBusStatus(busId, status);
+            showToast(res.data?.message || 'Bus status updated.', 'success');
+            await Promise.all([loadTerminalBuses(), loadDepartures()]);
+            renderDashboard();
+        } catch(e) {
+            showToast(e.message || 'Failed to update bus status.', 'error');
+            await loadTerminalBuses();
+        }
+    }
+
+    async function loadArrivals() {
+        try {
+            const res = await API.getArrivals();
+            arrivals = res.data || [];
+            populateArrivalOriginFilter();
+            renderArrivals();
+        } catch(e) {
+            arrivals = [];
+            document.getElementById('arrTbody').innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;padding:24px;">Failed to load arrivals.</td></tr>';
+        }
+    }
+
+    function renderArrivals() {
+        const dailyArrivals = arrivals.filter(t =>
+            tripDate(t.arrivalTime) === arrivalDateFilter
+            && (arrivalOriginFilter === 'all' || arrivalOriginKey(t) === arrivalOriginFilter)
+        );
+        document.getElementById('arrTbody').innerHTML = dailyArrivals.length
+                ? dailyArrivals.map(t => `
+                <tr>
+                <td>${esc(t.origin)} to ${esc(t.destination)}</td>
+                    <td>${esc(t.driverName || '—')}</td>
+                    <td>${formatDt(t.departureTime)}</td>
+                    <td>${formatDt(t.arrivalTime)}</td>
+                    <td>${availableSeatCount(t)}/${t.totalSeats}</td>
+                    <td>${badge2(t.status)}</td>
+                </tr>`).join('')
+                : '<tr><td colspan="6" style="text-align:center;color:#888;padding:24px;">No arrivals match these filters.</td></tr>';
+    }
+
+    function setArrivalDateFilter(value) {
+        arrivalDateFilter = value || todayDate();
+        syncArrivalDateInput();
+        renderArrivals();
+    }
+
+    function setArrivalOriginFilter(value) {
+        arrivalOriginFilter = value || 'all';
+        renderArrivals();
+    }
+
+    function populateArrivalOriginFilter() {
+        const select = document.getElementById('arrivalOriginFilter');
+        if (!select) return;
+        const selected = arrivalOriginFilter;
+        const origins = Array.from(new Map(arrivals
+            .map(t => [arrivalOriginKey(t), t.origin])
+            .filter(([key, label]) => key && label)
+        ).entries()).sort((a, b) => a[1].localeCompare(b[1]));
+        select.innerHTML = '<option value="all">All origins</option>' +
+            origins.map(([key, label]) => `<option value="${esc(key)}">${esc(label)}</option>`).join('');
+        select.value = origins.some(([key]) => key === selected) ? selected : 'all';
+        arrivalOriginFilter = select.value;
+    }
+
+    function arrivalOriginKey(trip) {
+        return String(trip?.origin || '').trim().toLowerCase();
+    }
+
+    function syncArrivalDateInput() {
+        const el = document.getElementById('arrivalTripDateFilter');
+        if (el) el.value = arrivalDateFilter;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  ROUTES
+    // ══════════════════════════════════════════════════════════════
+
+    async function loadRoutes() {
+        try {
+            const res = await API.getRoutes();
+            routes = res.data || [];
+            renderRoutes();
+            populateRouteSelect();
+        } catch(e) { routes = []; }
+    }
+
+    function renderRoutes() {
+        const tbody = document.getElementById('routesTbody');
+        if (!tbody) return;
+        const visibleRoutes = uniqueRoutes(routes);
+        tbody.innerHTML = visibleRoutes.length
+            ? visibleRoutes.map(r => `
+            <tr>
+                <td>${esc(r.origin)}</td>
+                <td>${esc(r.destination)}</td>
+                <td>${r.distanceKm} km</td>
+                <td>${badge2(r.status)}</td>
+                <td>
+                    <button class="btn btn-sm btn-ghost" onclick="sendRouteRequest(${r.id})" ${r.status==='approved'?'disabled title="Already approved"':''}>Send Request</button>
+                </td>
+            </tr>`).join('')
+            : '<tr><td colspan="5" style="text-align:center;color:#888;padding:24px;">No admin-defined routes are available for this terminal.</td></tr>';
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  DRIVERS
+    // ══════════════════════════════════════════════════════════════
+
+    async function loadDrivers() {
+        try {
+            const res = await API.getDrivers();
+            drivers = res.data || [];
+            document.getElementById('driversTbody').innerHTML = drivers.length
+                ? drivers.map(d => `
+                <tr>
+                    <td>${esc(d.fullName)}</td>
+                    <td>${esc(d.email)}</td>
+                    <td>${badge2(d.availability || 'Available')}</td>
+                    <td>${d.activeTrip ? `${esc(d.activeTrip)}<div style="font-size:12px;color:var(--slate-mid);">${formatDt(d.activeTripDeparture)} · ${esc(d.activeTripStatus || '')}</div>` : 'Available'}</td>
+                </tr>`).join('')
+                : '<tr><td colspan="4" style="text-align:center;color:#888;padding:24px;">No drivers yet. Add one above.</td></tr>';
+            populateDriverSelect();
+        } catch(e) { drivers = []; }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  BOOKINGS
+    // ══════════════════════════════════════════════════════════════
+
+    function populateBookingSelect() {
+        const selected = document.getElementById('bookingTripSelect')?.value || '';
+        const departingTrips = tripsForSelectedDay()
+            .filter(t => String(t.terminalId) === String(me.terminalId));
+
+        document.getElementById('bookingTripSelect').innerHTML =
+            '<option value="">— select a trip —</option>' +
+            departingTrips.map(t =>
+                `<option value="${t.id}">${esc(t.origin)} to ${esc(t.destination)} - ${formatDt(t.departureTime)}</option>`
+            ).join('');
+        if (departingTrips.some(t => String(t.id) === selected)) {
+            document.getElementById('bookingTripSelect').value = selected;
+        } else {
+            document.getElementById('bookingsTbody').innerHTML =
+                '<tr><td colspan="6" style="text-align:center;color:#888;padding:24px;">Select a trip above.</td></tr>';
+        }
+    }
+
+    function openBookingsForTrip(tripId) {
+        showSection('bookings', document.querySelector('[onclick*="bookings"]'));
+        document.getElementById('bookingTripSelect').value = tripId;
+        loadBookings();
+    }
+
+    async function loadBookings() {
+        const tripId = document.getElementById('bookingTripSelect').value;
+        const tbody  = document.getElementById('bookingsTbody');
+        if (!tripId) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;padding:24px;">Select a trip above.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;"><span class="spinner dark"></span> Loading…</td></tr>';
+        try {
+            const res = await API.getBookingsForTrip(tripId);
+            const bk  = res.data || [];
+            syncTripSeatCount(tripId, bk.length);
+            tbody.innerHTML = bk.length
+                ? bk.map(b => `
+                <tr>
+                    <td>${esc(b.firstName)} ${esc(b.lastName)}</td>
+                    <td><span class="badge badge-info">${esc(b.seatNumber)}</span></td>
+                    <td>${b.discountPct > 0 ? `<span class="badge badge-warning">${b.discountPct}%</span>` : '—'}</td>
+                    <td><strong>${b.finalPrice} L</strong></td>
+                    <td>${esc(b.paymentMethod)}</td>
+                    <td>${badge2(b.paymentStatus)}</td>
+                </tr>`).join('')
+                : '<tr><td colspan="6" style="text-align:center;color:#888;padding:24px;">No bookings for this trip.</td></tr>';
+        } catch(e) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#888;padding:24px;">${esc(e.message || 'Failed to load bookings.')}</td></tr>`;
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  ROUTE REQUESTS
+    // ══════════════════════════════════════════════════════════════
+
+    async function loadRequests() {
+        try {
+            const [inc, out] = await Promise.all([API.getIncomingRequests(), API.getOutgoingRequests()]);
+            incoming = inc.data || [];
+            outgoing = out.data || [];
+            renderRequests();
+        } catch(e) { incoming = []; outgoing = []; }
+    }
+
+    function renderRequests() {
+        document.getElementById('incomingTbody').innerHTML = incoming.length
+            ? incoming.map(r => `
+            <tr>
+                <td>${esc(r.fromCity)}</td>
+                <td>${esc(r.origin)} to ${esc(r.destination)}</td>
+                <td>${requestTripTime(r)}</td>
+                <td>${r.distanceKm} km</td>
+                <td>${badge2(r.status)}</td>
+                <td>
+                    ${r.status === 'pending' ? `
+                        <button class="btn btn-sm btn-primary" onclick="approveRequest(${r.id})">Approve</button>
+                        <button class="btn btn-sm btn-ghost" onclick="openRejectModal(${r.id})">Reject</button>
+                    ` : '—'}
+                </td>
+            </tr>`).join('')
+            : '<tr><td colspan="6" style="text-align:center;color:#888;padding:24px;">No incoming requests.</td></tr>';
+
+        document.getElementById('outgoingTbody').innerHTML = outgoing.length
+            ? outgoing.map(r => `
+            <tr>
+                <td>${esc(r.origin)} to ${esc(r.destination)}</td>
+                <td>${requestTripTime(r)}</td>
+                <td>${r.distanceKm} km</td>
+                <td>${badge2(r.status)}</td>
+                <td>${r.rejectionReason ? `<span style="color:var(--red);">${esc(r.rejectionReason)}</span>` : '—'}</td>
+            </tr>`).join('')
+            : '<tr><td colspan="5" style="text-align:center;color:#888;padding:24px;">No outgoing requests.</td></tr>';
+    }
+
+    function requestTripTime(r) {
+        const departure = r.requestedDepartureTime || r.departureTime;
+        const arrival = r.requestedArrivalTime || r.arrivalTime;
+        if (!departure) return '—';
+        return arrival
+            ? `${formatDt(departure)}<div style="font-size:12px;color:var(--slate-mid);">Arrives ${formatDt(arrival)}</div>`
+            : formatDt(departure);
+    }
+
+    async function approveRequest(id) {
+        if (!confirm('Approve this route request?')) return;
+        try {
+            await API.approveRequest(id);
+            showToast('Route request approved!', 'success');
+            await loadRequests();
+            await loadRoutes();
+            renderDashboard();
+        } catch(e) { showToast(e.message || 'Failed to approve.', 'error'); }
+    }
+
+    function openRejectModal(id) {
+        document.getElementById('rejectRequestId').value = id;
+        document.getElementById('rejectReason').value = '';
+        hideErr('rejectErr');
+        openModal('rejectModal');
+    }
+
+    async function confirmReject() {
+        const id     = document.getElementById('rejectRequestId').value;
+        const reason = document.getElementById('rejectReason').value.trim();
+        if (!reason) { showErr('rejectErr', 'Reason is required.'); return; }
+
+        setBtnLoading('confirmRejectBtn', true);
+        try {
+            await API.rejectRequest(id, reason);
+            closeModal('rejectModal');
+            showToast('Route request rejected.', 'default');
+            await loadRequests();
+            await loadRoutes();
+            renderDashboard();
+        } catch(e) {
+            showErr('rejectErr', e.message || 'Failed to reject.');
+        } finally {
+            setBtnLoading('confirmRejectBtn', false, 'Reject Request');
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  SEAT MAP
+    // ══════════════════════════════════════════════════════════════
+
+    async function loadPassengerContacts() {
+        const tbody = document.getElementById('contactsTbody');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;"><span class="spinner dark"></span> Loading...</td></tr>';
+        try {
+            const res = await API.getPassengerContacts();
+            passengerContacts = res.data || [];
+            tbody.innerHTML = passengerContacts.length ? passengerContacts.map(c => `
+                <tr>
+                    <td>${esc(c.passengerName)}<div style="font-size:12px;color:var(--slate-mid);">${esc(c.passengerEmail)}</div></td>
+                    <td>${esc(c.subject)}</td>
+                    <td style="max-width:340px;">
+                        <div><strong>Passenger:</strong> ${esc(c.message)}</div>
+                        ${c.reply ? `<div class="alert alert-success show" style="margin-top:8px;margin-bottom:0;"><strong>Operator reply:</strong> ${esc(c.reply)}</div>` : ''}
+                    </td>
+                    <td>${badge2(c.status)}</td>
+                    <td>${esc(c.createdAt || '')}</td>
+                    <td>
+                        ${c.status === 'answered' ? '' : `<button class="btn btn-sm btn-primary" onclick="openContactReply(${c.id})">Reply</button>`}
+                        <button class="btn btn-sm btn-ghost" onclick="deletePassengerContact(${c.id})">Delete</button>
+                    </td>
+                </tr>
+            `).join('') : '<tr><td colspan="6" style="text-align:center;color:#888;padding:24px;">No passenger contact messages.</td></tr>';
+        } catch(e) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#888;padding:24px;">${esc(e.message || 'Failed to load contacts.')}</td></tr>`;
+        }
+    }
+
+    function syncTripSeatCount(tripId, reservedSeats) {
+        const trip = trips.find(t => String(t.id) === String(tripId));
+        if (!trip) return;
+        trip.availableSeats = Math.max(Number(trip.totalSeats || 0) - Number(reservedSeats || 0), 0);
+        renderDepartures();
+        renderDashboard();
+        populateBookingSelect();
+        document.getElementById('bookingTripSelect').value = tripId;
+    }
+
+    function openContactReply(id) {
+        const contact = passengerContacts.find(c => c.id === id);
+        if (!contact) return;
+        document.getElementById('contactReplyId').value = id;
+        document.getElementById('contactReplySummary').innerHTML =
+            `<strong>${esc(contact.passengerName)}</strong><br>${esc(contact.subject)}<br>${esc(contact.message)}`;
+        document.getElementById('contactReplyText').value = '';
+        hideErr('contactReplyErr');
+        openModal('contactReplyModal');
+    }
+
+    async function sendContactReply() {
+        const id = document.getElementById('contactReplyId').value;
+        const reply = document.getElementById('contactReplyText').value.trim();
+        if (!reply) { showErr('contactReplyErr', 'Reply is required.'); return; }
+        setBtnLoading('sendContactReplyBtn', true);
+        try {
+            await API.replyPassengerContact(id, reply);
+            closeModal('contactReplyModal');
+            showToast('Reply sent.', 'success');
+            await loadPassengerContacts();
+            await refreshNotifications();
+        } catch(e) {
+            showErr('contactReplyErr', e.message || 'Failed to send reply.');
+        } finally {
+            setBtnLoading('sendContactReplyBtn', false, 'Send Reply');
+        }
+    }
+
+    async function deletePassengerContact(id) {
+        if (!confirm('Remove this message from operator history?')) return;
+        try {
+            await API.deletePassengerContact(id);
+            showToast('Message removed from history.', 'success');
+            await loadPassengerContacts();
+        } catch(e) {
+            showToast(e.message || 'Failed to delete message.', 'error');
+        }
+    }
+
+    async function openSeatMap(tripId, totalSeats) {
+        document.getElementById('seatInfo').textContent = 'Loading seat map…';
+        document.getElementById('seatGrid').innerHTML = '';
+        openModal('seatModal');
+        try {
+            const res   = await API.getSeatMap(tripId);
+            const taken = res.data || [];
+            document.getElementById('seatInfo').textContent =
+                `${totalSeats - taken.length} available  ·  ${taken.length} taken  ·  ${totalSeats} total`;
+
+            const grid = document.getElementById('seatGrid');
+            grid.innerHTML = '';
+            let seat = 1;
+            while (seat <= totalSeats) {
+                const row = document.createElement('div');
+                row.className = 'seat-row';
+                for (let col = 0; col < 4 && seat <= totalSeats; col++) {
+                    if (col === 2) {
+                        const a = document.createElement('div');
+                        a.className = 'seat-aisle';
+                        row.appendChild(a);
+                    }
+                    const s = document.createElement('div');
+                    s.className = 'seat ' + (taken.includes(seat) ? 'taken' : 'available');
+                    s.textContent = seat;
+                    row.appendChild(s);
+                    seat++;
+                }
+                grid.appendChild(row);
+            }
+        } catch(e) {
+            document.getElementById('seatInfo').textContent = 'Failed to load seat map.';
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  TRIP MODAL
+    // ══════════════════════════════════════════════════════════════
+
+    async function openTripModal(trip) {
+        if (trip && !canEditTrip(trip)) {
+            showToast('Arrived and cancelled trips cannot be edited.', 'error');
+            return;
+        }
+        hideErr('tripErr');
+        try {
+            if (!routes.length) await loadRoutes();
+            if (!drivers.length) await loadDrivers();
+            if (!buses.length) await loadTerminalBuses();
+        } catch(e) {}
+        document.getElementById('tripModalTitle').textContent = trip ? 'Edit Trip' : 'Request Trip Approval';
+        document.getElementById('tripId').value = trip ? trip.id : '';
+        editingTripRouteId = trip?.routeId == null ? null : String(trip.routeId);
+
+        populateRouteSelect(editingTripRouteId, trip);
+        document.getElementById('tripRoute').disabled = !!trip;
+
+        document.getElementById('tripDeparture').value = trip ? toDateTimeLocal(trip.departureTime) : '';
+        document.getElementById('tripArrival').value = trip ? toDateTimeLocal(trip.arrivalTime) : '';
+        tripDurationMinutes = getDurationMinutes(
+            document.getElementById('tripDeparture').value,
+            document.getElementById('tripArrival').value
+        );
+        syncArrivalDate();
+        document.getElementById('tripSeats').value = trip ? trip.totalSeats : '';
+        document.getElementById('tripPrice').value = trip ? trip.price : '';
+        populateDriverSelect(trip?.driverId || '');
+        populateBusSelect(trip?.busId || '');
+
+        openModal('tripModal');
+        setBtnLoading('saveTripBtn', false, trip ? 'Save Trip' : 'Send Request');
+    }
+
+    function toDateTimeLocal(value) {
+        if (!value) return '';
+        return value.replace(' ', 'T').slice(0, 16);
+    }
+
+    function canEditTrip(trip) {
+        const status = trip?.status == null ? '' : String(trip.status).toLowerCase();
+        return status !== 'arrived' && status !== 'cancelled';
+    }
+
+    function canChangeTripStatus(trip) {
+        const status = trip?.status == null ? '' : String(trip.status).toLowerCase();
+        return status === 'scheduled' || status === 'departed';
+    }
+
+    function populateRouteSelect(selectedRouteId = null, selectedTrip = null) {
+        const selectedId = selectedRouteId == null || selectedRouteId === '' ? null : String(selectedRouteId);
+        let approved = uniqueRoutes(routes, selectedId);
+
+        if (selectedId && !approved.some(r => String(r.id) === selectedId)) {
+            const current = routes.find(r => String(r.id) === selectedId);
+            if (current) approved.push(current);
+            else if (selectedTrip) {
+                approved.push({
+                    id: selectedId,
+                    origin: selectedTrip.origin,
+                    destination: selectedTrip.destination
+                });
+            }
+        }
+        approved = uniqueRoutes(approved, selectedId);
+
+        document.getElementById('tripRoute').innerHTML =
+            '<option value="">Select route</option>' +
+            approved.map(r =>
+                `<option value="${r.id}" ${String(r.id) === selectedId ? 'selected' : ''}>
+                ${esc(r.origin)} to ${esc(r.destination)}
+            </option>`
+            ).join('');
+        if (!approved.length) {
+            document.getElementById('tripRoute').innerHTML = '<option value="">No routes available</option>';
+        }
+    }
+
+    function uniqueRoutes(items, selectedRouteId = null) {
+        const selectedId = selectedRouteId == null ? null : String(selectedRouteId);
+        const byPath = new Map();
+        items.forEach(r => {
+            const key = `${r.originTerminalId || ''}|${String(r.origin || '').trim().toLowerCase()}|${String(r.destination || '').trim().toLowerCase()}`;
+            if (!byPath.has(key) || String(r.id) === selectedId) byPath.set(key, r);
+        });
+        return Array.from(byPath.values());
+    }
+
+    function populateDriverSelect(selectedDriverId = null) {
+        const currentDriverId = selectedDriverId == null
+            ? (document.getElementById('tripDriver')?.value || '')
+            : String(selectedDriverId || '');
+        const selectable = availableDriversForTripWindow(currentDriverId);
+        const needsTime = !hasTripWindow();
+        document.getElementById('tripDriver').innerHTML =
+            `<option value="">${needsTime ? 'Set departure and arrival first' : 'Select driver'}</option>` +
+            selectable.map(d => `<option value="${d.id}" ${String(d.id) === String(currentDriverId) ? 'selected' : ''}>${esc(d.fullName)}${d.availability === 'Available' ? '' : ` (${esc(d.availability || 'In Service')})`}</option>`).join('');
+        if (currentDriverId) document.getElementById('tripDriver').value = currentDriverId;
+    }
+
+    function populateBusSelect(selectedBusId = '') {
+        const selectedId = selectedBusId == null ? '' : String(selectedBusId);
+        const selectable = availableBusesForTripWindow(selectedId);
+        const needsTime = !hasTripWindow();
+        document.getElementById('tripBus').innerHTML =
+            `<option value="">${needsTime ? 'Set departure and arrival first' : 'Select bus'}</option>` +
+            selectable.map(b => `<option value="${b.id}" data-seats="${b.seatCount}" ${String(b.id) === selectedId ? 'selected' : ''}>${esc(b.plateNumber)} · ${esc(b.model)} · ${b.seatCount} seats</option>`).join('');
+        syncTripBusSeats();
+    }
+
+    function refreshAvailableTripResources() {
+        populateDriverSelect(document.getElementById('tripDriver')?.value || '');
+        populateBusSelect(document.getElementById('tripBus')?.value || '');
+    }
+
+    function hasTripWindow() {
+        const departure = document.getElementById('tripDeparture')?.value;
+        const arrival = document.getElementById('tripArrival')?.value;
+        return departure && arrival && new Date(arrival) > new Date(departure);
+    }
+
+    function availableDriversForTripWindow(selectedDriverId = '') {
+        if (!hasTripWindow()) return [];
+        return drivers.filter(d => String(d.id) === String(selectedDriverId) || !resourceHasTripConflict('driverId', d.id));
+    }
+
+    function availableBusesForTripWindow(selectedBusId = '') {
+        if (!hasTripWindow()) return [];
+        return buses.filter(b =>
+            b.active !== false &&
+            b.status === 'Available' &&
+            (String(b.id) === String(selectedBusId) || !resourceHasTripConflict('busId', b.id))
+        );
+    }
+
+    function resourceHasTripConflict(field, id) {
+        const departure = new Date(document.getElementById('tripDeparture')?.value || '');
+        const arrival = new Date(document.getElementById('tripArrival')?.value || '');
+        const editingId = document.getElementById('tripId')?.value || '';
+        if (Number.isNaN(departure.getTime()) || Number.isNaN(arrival.getTime())) return true;
+        return trips.some(t => {
+            if (String(t.id) === String(editingId)) return false;
+            if (String(t[field]) !== String(id)) return false;
+            const status = String(t.status || '').toLowerCase();
+            if (status !== 'scheduled' && status !== 'departed') return false;
+            const tripDeparture = new Date(toDateTimeLocal(t.departureTime));
+            const tripArrival = new Date(toDateTimeLocal(t.arrivalTime));
+            return tripDeparture < arrival && tripArrival > departure;
+        });
+    }
+
+    function syncTripBusSeats() {
+        const selected = document.getElementById('tripBus').selectedOptions[0];
+        document.getElementById('tripSeats').value = selected?.dataset.seats || '';
+    }
+
+    async function saveTrip() {
+        syncArrivalDate();
+        const id        = document.getElementById('tripId').value;
+        const routeId   = document.getElementById('tripRoute').value || editingTripRouteId || '';
+        const busId     = document.getElementById('tripBus').value;
+        const driverId  = document.getElementById('tripDriver').value;
+        const departure = document.getElementById('tripDeparture').value;
+        const arrival   = document.getElementById('tripArrival').value;
+        const price     = document.getElementById('tripPrice').value;
+        if (!routeId)   { showErr('tripErr', 'Please select a route.'); return; }
+        if (!busId)     { showErr('tripErr', 'Please select a bus.'); return; }
+        if (!driverId)  { showErr('tripErr', 'Please select a driver.'); return; }
+        if (!departure) { showErr('tripErr', 'Please enter departure time.'); return; }
+        if (!arrival)   { showErr('tripErr', 'Please enter arrival time.'); return; }
+        if (new Date(arrival) <= new Date(departure)) { showErr('tripErr', 'Arrival must be after departure.'); return; }
+        if (!price || price <= 0) { showErr('tripErr', 'Please enter a valid price.'); return; }
+
+        if (!id) {
+            if (!confirm('Send this trip request to the destination terminal for approval?')) return;
+            setBtnLoading('saveTripBtn', true);
+            try {
+                await API.sendRouteRequest(routeId, {
+                    driverId,
+                    busId,
+                    price,
+                    tripDepartureTime: departure,
+                    tripArrivalTime: arrival,
+                    departureTime: departure,
+                    arrivalTime: arrival,
+                    requestedDepartureTime: departure,
+                    requestedArrivalTime: arrival
+                });
+                closeModal('tripModal');
+                showToast('Trip request sent to destination terminal.', 'success');
+                await Promise.all([loadRequests(), loadRoutes()]);
+            } catch(e) {
+                showErr('tripErr', e.message || 'Failed to send trip request.');
+            } finally {
+                setBtnLoading('saveTripBtn', false, 'Send Request');
+            }
+            return;
+        }
+
+        setBtnLoading('saveTripBtn', true);
+        try {
+            const data = { routeId, busId, driverId, departureTime: departure, arrivalTime: arrival, price };
+            if (id) await API.updateTrip(id, data);
+            else    await API.createTrip(data);
+            closeModal('tripModal');
+            showToast(id ? 'Trip updated!' : 'Trip scheduled!', 'success');
+            await Promise.all([loadDepartures(), loadTerminalBuses()]);
+            renderDashboard();
+        } catch(e) {
+            showErr('tripErr', e.message || 'Failed to save trip.');
+        } finally {
+            setBtnLoading('saveTripBtn', false, 'Save Trip');
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  STATUS MODAL
+    // ══════════════════════════════════════════════════════════════
+
+    function openStatusModal(tripId, currentStatus) {
+        document.getElementById('statusTripId').value = tripId;
+        const sel = document.getElementById('statusSelect');
+        sel.innerHTML = '';
+        if (currentStatus === 'scheduled') {
+            sel.innerHTML += '<option value="departed">Mark as Departed</option>';
+            sel.innerHTML += '<option value="cancelled">Cancel Trip</option>';
+        } else if (currentStatus === 'departed') {
+            sel.innerHTML += '<option value="arrived">Mark as Arrived</option>';
+            sel.innerHTML += '<option value="cancelled">Cancel Trip</option>';
+        } else {
+            sel.innerHTML = '<option disabled>No transitions available</option>';
+        }
+        hideErr('statusErr');
+        openModal('statusModal');
+    }
+
+    async function saveStatus() {
+        const id     = document.getElementById('statusTripId').value;
+        const status = document.getElementById('statusSelect').value;
+        setBtnLoading('saveStatusBtn', true);
+        try {
+            await API.transitionTrip(id, status);
+            closeModal('statusModal');
+            showToast('Trip status updated!', 'success');
+            await loadDepartures();
+            renderDashboard();
+        } catch(e) {
+            showErr('statusErr', e.message || 'Failed to update status.');
+        } finally {
+            setBtnLoading('saveStatusBtn', false, 'Update');
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  ROUTE MODAL
+    // ══════════════════════════════════════════════════════════════
+
+    function openRouteModal(route) {
+        document.getElementById('routeModalTitle').textContent = route ? 'Edit Route' : 'New Route';
+        document.getElementById('routeId').value           = route ? route.id : '';
+        document.getElementById('routeOrigin').value       = me.terminalCity || 'Your Terminal';
+        document.getElementById('routeDestination').value  = route ? route.destination : '';
+        document.getElementById('routeDistance').value     = route ? route.distanceKm : '';
+        hideErr('routeErr');
+        openModal('routeModal');
+    }
+
+    async function saveRoute() {
+        const id   = document.getElementById('routeId').value;
+        const dest = document.getElementById('routeDestination').value;
+        const dist = document.getElementById('routeDistance').value;
+        if (!dest) { showErr('routeErr', 'Please select a destination.'); return; }
+        if (!dist || dist <= 0) { showErr('routeErr', 'Please enter a valid distance.'); return; }
+
+        setBtnLoading('saveRouteBtn', true);
+        try {
+            const data = { destination: dest, distanceKm: parseInt(dist) };
+            if (id) await API.updateRoute(id, data);
+            else    await API.createRoute(data);
+            closeModal('routeModal');
+            showToast(id ? 'Route updated!' : 'Route created!', 'success');
+            await loadRoutes();
+        } catch(e) {
+            showErr('routeErr', e.message || 'Failed to save route.');
+        } finally {
+            setBtnLoading('saveRouteBtn', false, 'Save Route');
+        }
+    }
+
+    async function sendRouteRequest(routeId) {
+        const route = routes.find(r => String(r.id) === String(routeId));
+        if (!route) { showToast('Route not found.', 'error'); return; }
+        await openTripModal(null);
+        document.getElementById('tripRoute').value = routeId;
+        syncArrivalDate();
+        showToast('Enter the departure time, then send the request.', 'success');
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  DRIVER MODAL
+    // ══════════════════════════════════════════════════════════════
+
+    function openDriverModal() {
+        document.getElementById('driverName').value = '';
+        document.getElementById('driverEmail').value = '';
+        document.getElementById('driverPassword').value = '';
+        hideErr('driverErr');
+        openModal('driverModal');
+    }
+
+    async function saveDriver() {
+        const name  = document.getElementById('driverName').value.trim();
+        const email = document.getElementById('driverEmail').value.trim();
+        const pwd   = document.getElementById('driverPassword').value;
+
+        if (!name)        { showErr('driverErr', 'Full name is required.'); return; }
+        if (!email)       { showErr('driverErr', 'Email is required.'); return; }
+        if (pwd.length < 6) { showErr('driverErr', 'Password must be at least 6 characters.'); return; }
+
+        setBtnLoading('saveDriverBtn', true);
+        try {
+            await API.addDriver({ fullName: name, email, password: pwd });
+            closeModal('driverModal');
+            showToast('Driver added successfully!', 'success');
+            await loadDrivers();
+        } catch(e) {
+            showErr('driverErr', e.message || 'Failed to add driver. Email may already exist.');
+        } finally {
+            setBtnLoading('saveDriverBtn', false, 'Add Driver');
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  MODAL HELPERS
+    // ══════════════════════════════════════════════════════════════
+
+    function openModal(id)  { document.getElementById(id).classList.add('show'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+    // Close modals on overlay click
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', function(e) {
+            if (e.target === this) this.classList.remove('show');
+        });
+    });
+
+    // Escape key closes modals
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.modal-overlay.show').forEach(m => m.classList.remove('show'));
+            closeSidebar();
+        }
+    });
+
+    // ══════════════════════════════════════════════════════════════
+    //  UI HELPERS
+    // ══════════════════════════════════════════════════════════════
+
+    function showErr(id, msg) {
+        const el = document.getElementById(id);
+        el.textContent = msg;
+        el.classList.add('show');
+    }
+    function hideErr(id) {
+        const el = document.getElementById(id);
+        el.textContent = '';
+        el.classList.remove('show');
+    }
+
+    function setBtnLoading(id, loading, resetLabel) {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.disabled = loading;
+        if (loading) {
+            btn.innerHTML = '<span class="spinner"></span> Saving…';
+        } else if (resetLabel) {
+            btn.textContent = resetLabel;
+        }
+    }
+
+    function formatDt(s) {
+        if (!s) return '—';
+        return s.replace('T', ' ').slice(0, 16);
+    }
+
+    function availableSeatCount(trip) {
+        const total = Number(trip?.totalSeats || 0);
+        const available = Number(trip?.availableSeats);
+        return Number.isFinite(available) ? Math.max(available, 0) : total;
+    }
+
+    function todayDate() {
+        const d = new Date();
+        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        return d.toISOString().slice(0, 10);
+    }
+
+    function esc(str) {
+        if (str == null) return '—';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    // badge2 used internally (badge is reserved in outer scope for trips)
+    function badge2(status) {
+        const map = {
+            scheduled: ['badge-info',    'Scheduled'],
+            departed:  ['badge-warning', 'Departed'],
+            arrived:   ['badge-success', 'Arrived'],
+            cancelled: ['badge-danger',  'Cancelled'],
+            needs_reassignment: ['badge-danger', 'Needs Reassignment'],
+            pending:   ['badge-warning', 'Pending'],
+            approved:  ['badge-success', 'Approved'],
+            rejected:  ['badge-danger',  'Rejected'],
+            paid:      ['badge-success', 'Paid'],
+            unpaid:    ['badge-danger',  'Unpaid'],
+            card:      ['badge-info',    'Card'],
+            cash:      ['badge-warning', 'Cash'],
+            open:      ['badge-warning', 'Open'],
+            answered:  ['badge-success', 'Answered'],
+            available: ['badge-success', 'Available'],
+            'in service': ['badge-warning', 'In Service'],
+            'under maintenance': ['badge-danger', 'Under Maintenance'],
+        };
+        const [cls, label] = map[status?.toLowerCase()] || ['badge-info', status || '—'];
+        return `<span class="badge ${cls}">${label}</span>`;
+    }
+
+    function showToast(msg, type = 'default') {
+        const container = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = msg;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 3500);
+    }
+
+    document.getElementById('tripDeparture').addEventListener('change', syncArrivalDate);
+    document.getElementById('tripArrival').addEventListener('change', syncArrivalDate);
+
+    function syncArrivalDate(event) {
+        const dep = document.getElementById('tripDeparture').value;
+        const arr = document.getElementById('tripArrival').value;
+        const arrivalInput = document.getElementById('tripArrival');
+        const changedField = event?.target?.id || null;
+
+        if (!dep) {
+            arrivalInput.removeAttribute('min');
+            arrivalInput.removeAttribute('max');
+            tripDurationMinutes = null;
+            return;
+        }
+
+        const depDate = dep.slice(0, 10);
+        arrivalInput.min = depDate + 'T00:00';
+        arrivalInput.max = depDate + 'T23:59';
+
+        const routeDuration = selectedRouteDurationMinutes();
+        if (!arr || changedField === 'tripDeparture' || changedField === 'tripRoute') {
+            const minutes = routeDuration || tripDurationMinutes || 30;
+            const nextArrival = new Date(new Date(dep).getTime() + minutes * 60000);
+            arrivalInput.value = formatDateTimeLocal(nextArrival);
+            tripDurationMinutes = minutes;
+            return;
+        }
+
+        if (changedField === 'tripDeparture' && tripDurationMinutes > 0) {
+            const nextArrival = new Date(new Date(dep).getTime() + tripDurationMinutes * 60000);
+            arrivalInput.value = formatDateTimeLocal(nextArrival);
+            return;
+        }
+
+        arrivalInput.value = depDate + 'T' + arr.slice(11, 16);
+        tripDurationMinutes = getDurationMinutes(dep, arrivalInput.value);
+    }
+
+    function selectedRouteDurationMinutes() {
+        const routeId = document.getElementById('tripRoute')?.value || editingTripRouteId;
+        const route = routes.find(r => String(r.id) === String(routeId));
+        const distance = parseInt(route?.distanceKm || 0);
+        if (!distance || distance <= 0) return null;
+        return Math.ceil(distance) + 30;
+    }
+
+    function getDurationMinutes(departure, arrival) {
+        if (!departure || !arrival) return null;
+        const minutes = Math.round((new Date(arrival) - new Date(departure)) / 60000);
+        return minutes > 0 ? minutes : null;
+    }
+
+    function formatDateTimeLocal(date) {
+        const pad = value => String(value).padStart(2, '0');
+        return [
+            date.getFullYear(),
+            pad(date.getMonth() + 1),
+            pad(date.getDate())
+        ].join('-') + 'T' + [pad(date.getHours()), pad(date.getMinutes())].join(':');
+    }
+
+    // ── Boot ──────────────────────────────────────────────────────
+    init();
+</script>
+</body>
+</html>

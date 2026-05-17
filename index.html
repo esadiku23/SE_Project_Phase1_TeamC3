@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>ALBus — Sign In</title>
+    <link rel="stylesheet" href="/css/albus.css"/>
+    <style>
+        html,body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--tundra);}
+        .login-shell{display:grid;grid-template-columns:1fr 400px;width:860px;height:580px;border-radius:18px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.18);}
+        .hero{background:var(--slate);position:relative;overflow:hidden;}
+        canvas{position:absolute;inset:0;width:100%;height:100%;}
+        .hero-overlay{position:absolute;bottom:0;left:0;right:0;padding:32px 36px 42px;background:linear-gradient(to top,rgba(20,28,33,.95) 0%,transparent 100%);}
+        .hero-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(242,208,121,.14);border:1px solid rgba(242,208,121,.28);color:var(--yellow);font-size:11px;font-weight:600;letter-spacing:.06em;padding:4px 12px;border-radius:999px;margin-bottom:14px;}
+        .badge-dot{width:5px;height:5px;background:var(--yellow);border-radius:50%;}
+        .headline{font-family:'Barlow Condensed',sans-serif;font-size:44px;font-weight:800;line-height:1.05;color:#fff;margin-bottom:10px;}
+        .headline .red{color:var(--red);font-style:italic;}
+        .hero-sub{font-size:13px;color:rgba(255,255,255,.45);line-height:1.65;}
+        .panel{background:var(--white);display:flex;flex-direction:column;justify-content:center;padding:44px 40px;}
+        .panel-sub{font-size:13px;color:var(--slate-mid);margin-bottom:28px;}
+        .pwd-wrap{position:relative;}
+        .pwd-wrap .form-control{padding-right:52px;}
+        .show-btn{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:12px;color:var(--slate-mid);cursor:pointer;}
+        .show-btn:hover{color:var(--red);}
+        .links{display:flex;flex-direction:column;align-items:center;gap:7px;margin-top:4px;}
+        .link-row{font-size:13px;color:var(--slate-mid);}
+        .link-row a{color:var(--red);font-weight:600;}
+        .link-row a:hover{text-decoration:underline;}
+        .link-row.muted a{color:var(--slate-mid);font-weight:400;}
+    </style>
+</head>
+<body>
+<div class="login-shell">
+    <div class="hero">
+        <!-- replace <canvas id="mapCanvas"></canvas> with: -->
+        <img src="/images/albania.png"
+             style="position:absolute; top:50%; left:50%; transform:translate(-50%,-60%);
+            height:320px; opacity:0.25; filter:brightness(0) invert(1);"
+             alt="Albania map"/>        <div class="hero-overlay">
+            <div class="hero-badge"><div class="badge-dot"></div>Albania's Bus Network</div>
+            <div class="headline">Travel<br>Smarter.<br><span class="red">Book</span> Faster.</div>
+            <p class="hero-sub">The unified platform for operators,<br>drivers, and passengers.</p>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="wm wm-lg" style="margin-bottom:5px;">
+            <span class="wm-al">AL</span><span class="wm-bus">Bus</span>
+        </div>
+        <p class="panel-sub">Sign in to your account</p>
+
+        <div class="form-group">
+            <label class="form-label" for="email">Email or admin username</label>
+            <input class="form-control" id="email" type="text" placeholder="you@albus.al" autocomplete="username"/>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="pwd">Password</label>
+            <div class="pwd-wrap">
+                <input class="form-control" id="pwd" type="password" placeholder="........" autocomplete="current-password"/>
+                <button class="show-btn" id="showBtn" type="button">Show</button>
+            </div>
+        </div>
+
+        <div class="alert alert-error" id="errBox"></div>
+
+        <button class="btn btn-primary btn-lg btn-block" id="loginBtn" style="margin-bottom:18px;">Sign In</button>
+
+        <div class="links">
+            <div class="link-row">New passenger? <a href="/register.html">Create an account</a></div>
+            <div class="link-row muted"><a href="/forgot-password.html">Forgot password?</a></div>
+        </div>
+    </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+    function showAlert(el, msg) {
+        el.textContent = msg;
+        el.classList.add('show');
+    }
+    function hideAlert(el) {
+        el.textContent = '';
+        el.classList.remove('show');
+    }
+    const emailEl  = document.getElementById('email');
+    const pwdEl    = document.getElementById('pwd');
+    const showBtn  = document.getElementById('showBtn');
+    const errBox   = document.getElementById('errBox');
+    const loginBtn = document.getElementById('loginBtn');
+
+    showBtn.addEventListener('click', () => {
+        const shown = pwdEl.type === 'text';
+        pwdEl.type = shown ? 'password' : 'text';
+        showBtn.textContent = shown ? 'Show' : 'Hide';
+    });
+
+    loginBtn.addEventListener('click', async () => {
+        hideAlert(errBox);
+        emailEl.classList.remove('error');
+
+        const email = emailEl.value.trim();
+        const pwd   = pwdEl.value;
+
+        if (!email) { emailEl.classList.add('error'); showAlert(errBox,'Email address is required.'); return; }
+        if (!email.includes('@') && email.toLowerCase() !== 'admin') { emailEl.classList.add('error'); showAlert(errBox,'Please enter a valid email or admin username.'); return; }
+        if (!pwd) { showAlert(errBox,'Password is required.'); return; }
+        if (pwd.length < 6) { showAlert(errBox,'Password must be at least 6 characters.'); return; }
+
+        loginBtn.disabled = true;
+        loginBtn.textContent = 'Signing in...';
+
+        try {
+            const res = await API.login(email, pwd);
+            const role = res.data.role;
+            const routes = { admin: '/admin.html', operator: '/operator.html', driver: '/driver.html', passenger: '/passenger.html' };
+            window.location.href = routes[role] || '/index.html';
+        } catch (err) {
+            showAlert(errBox, err.message || 'Incorrect email or password.');
+            loginBtn.disabled = false;
+            loginBtn.textContent = 'Sign In';
+        }
+    });
+
+    document.addEventListener('keydown', e => { if (e.key === 'Enter') loginBtn.click(); });
+
+    // Albania map animation
+    (function(){
+        const c = document.getElementById('mapCanvas');
+        const w = c.parentElement.offsetWidth; const h = 580;
+        c.width = w; c.height = h;
+        const g = c.getContext('2d');
+        const rawX=[195,210,230,245,255,260,250,240,235,245,255,260,255,248,240,230,215,200,185,170,160,155,158,165,175,185,195];
+        const rawY=[60,55,58,70,90,115,140,165,190,215,240,265,295,320,345,365,375,370,355,330,300,270,240,210,175,120,60];
+        const sc=w/340, ox=(w-200*sc)/2, oy=55;
+        const px=rawX.map(x=>ox+x*sc), py=rawY.map(y=>oy+y*.86);
+        let t=0;
+        function draw(){
+            t+=.018; const pulse=(Math.sin(t)+1)/2;
+            g.clearRect(0,0,w,h);
+            g.fillStyle='#2E3A42'; g.fillRect(0,0,w,h);
+            g.fillStyle='rgba(255,255,255,.03)';
+            for(let x=20;x<w;x+=30)for(let y=20;y<h;y+=30){g.beginPath();g.arc(x,y,1,0,Math.PI*2);g.fill();}
+            g.fillStyle=`rgba(226,36,36,${.05+pulse*.05})`;
+            g.beginPath();g.moveTo(px[0],py[0]);px.forEach((_,i)=>i&&g.lineTo(px[i],py[i]));g.closePath();g.fill();
+            g.fillStyle='#3D5260';
+            g.beginPath();g.moveTo(px[0],py[0]);px.forEach((_,i)=>i&&g.lineTo(px[i],py[i]));g.closePath();g.fill();
+            g.strokeStyle=`rgba(239,235,234,${.22+pulse*.18})`;g.lineWidth=1.5;
+            g.beginPath();g.moveTo(px[0],py[0]);px.forEach((_,i)=>i&&g.lineTo(px[i],py[i]));g.closePath();g.stroke();
+            requestAnimationFrame(draw);
+        }
+        draw();
+    })();
+</script>
+</body>
+</html>

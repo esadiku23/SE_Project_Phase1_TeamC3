@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>ALBus — Driver Dashboard</title>
+    <link rel="stylesheet" href="/css/albus.css"/>
+    <style>
+        /* ── Section visibility ── */
+        .section { display: none; }
+        .section.active { display: block; }
+
+        /* ── Mobile nav toggle ── */
+        .mobile-menu-btn {
+            display: none;
+            background: transparent;
+            border: 1px solid rgba(255,255,255,.25);
+            color: rgba(255,255,255,.85);
+            font-size: 18px;
+            width: 36px; height: 36px;
+            border-radius: 6px;
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+        }
+        .sidebar-overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,.4);
+            z-index: 49;
+        }
+        .sidebar-overlay.show { display: block; }
+
+        /* ── Trip cards ── */
+        .trip-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 20px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            transition: box-shadow .15s;
+        }
+        .trip-card:hover { box-shadow: 0 4px 16px rgba(46,58,66,.12); }
+        .trip-card-info { flex: 1; min-width: 0; }
+        .trip-card-route {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 20px; font-weight: 700;
+            color: var(--black);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .trip-card-meta { font-size: 13px; color: var(--slate-mid); margin-top: 4px; }
+        .trip-card-actions { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+
+        /* ── Empty state ── */
+        .empty-state {
+            text-align: center;
+            padding: 48px 24px;
+            color: var(--slate-mid);
+        }
+        .empty-state-icon { font-size: 40px; margin-bottom: 12px; }
+        .empty-state-title { font-family: 'Barlow Condensed', sans-serif; font-size: 20px; font-weight: 700; color: var(--black); margin-bottom: 6px; }
+
+        /* ── Toast notifications ── */
+        .toast-container {
+            position: fixed; bottom: 24px; right: 24px;
+            z-index: 999; display: flex; flex-direction: column; gap: 8px;
+        }
+        .toast {
+            background: var(--slate); color: #fff;
+            padding: 12px 18px; border-radius: 10px;
+            font-size: 13px; font-weight: 500;
+            box-shadow: 0 4px 16px rgba(0,0,0,.2);
+            animation: slideIn .2s ease;
+            max-width: 320px;
+        }
+        .toast.success { background: var(--success); }
+        .toast.error   { background: #C0392B; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        /* ── Confirm modal ── */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100; align-items: center; justify-content: center; }
+        .modal-overlay.show { display: flex; }
+
+        /* ── Loading spinner ── */
+        .spinner {
+            display: inline-block; width: 18px; height: 18px;
+            border: 2px solid rgba(255,255,255,.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin .6s linear infinite;
+            vertical-align: middle; margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Responsive ── */
+        @media (max-width: 768px) {
+            .mobile-menu-btn { display: inline-flex; }
+            .dashboard {
+                grid-template-columns: 1fr;
+                grid-template-areas: "topbar" "content";
+            }
+            .sidebar {
+                display: block !important;
+                position: fixed;
+                left: -220px; top: 0; bottom: 0;
+                width: 220px; z-index: 50;
+                transition: left .25s ease;
+                padding-top: 72px;
+            }
+            .sidebar.open { left: 0; }
+            .content { padding: 20px 16px; }
+            .trip-card { flex-wrap: wrap; }
+            .trip-card-actions { width: 100%; justify-content: flex-end; }
+            .stat-grid { grid-template-columns: repeat(2, 1fr); }
+            .page-header { flex-wrap: wrap; gap: 8px; }
+            .topbar-label { display: none; }
+        }
+
+        @media (max-width: 480px) {
+            .stat-grid { grid-template-columns: 1fr 1fr; }
+            .trip-card-route { font-size: 17px; }
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard">
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+        <button class="mobile-menu-btn" id="menuBtn" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
+        <div class="wm wm-sm"><span class="wm-al">AL</span><span class="wm-bus">Bus</span></div>
+        <span class="topbar-spacer"></span>
+        <span class="topbar-label" id="terminalLabel">Terminal</span>
+        <button class="topbar-btn" onclick="openNotifications()">Messages <span id="notifBadge" class="badge badge-danger" style="display:none;">0</span></button>
+        <button class="topbar-btn" id="userBtn">Driver</button>
+        <button class="topbar-btn logout" onclick="logout()">Logout</button>
+    </header>
+
+    <!-- Sidebar overlay (mobile) -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+    <!-- SIDEBAR -->
+    <nav class="sidebar" id="sidebar">
+        <button class="nav-item active" onclick="showSection('mytrips', this)">🚌 My Trips</button>
+        <button class="nav-item" onclick="showSection('manifest', this)">🧾 Passenger Manifest</button>
+        <button class="nav-item" onclick="showSection('payments', this)">💵 Cash Payments</button>
+    </nav>
+
+    <!-- CONTENT -->
+    <main class="content">
+
+        <!-- MY TRIPS -->
+        <section id="mytrips" class="section active">
+            <div class="page-header">
+                <h1 class="page-title">My Trips</h1>
+                <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
+                    <div class="form-group" style="margin:0; min-width:180px;">
+                        <label class="form-label">Day</label>
+                        <input class="form-control" id="driverTripDate" type="date" onchange="renderDailyTrips()"/>
+                    </div>
+                    <button class="btn btn-ghost btn-sm" onclick="loadTrips()" id="refreshBtn">↻ Refresh</button>
+                </div>
+            </div>
+
+            <div class="stat-grid" id="tripStats" style="margin-bottom:20px;">
+                <!-- Stats rendered by JS -->
+            </div>
+
+            <div class="alert alert-info show" style="margin-bottom:16px;">
+                Status flow: <strong>Scheduled → Departed → Arrived</strong>. Use the buttons on each trip card to update status.
+            </div>
+
+            <div id="tripCards">
+                <div class="empty-state">
+                    <div class="spinner" style="border-color:rgba(0,0,0,.15);border-top-color:var(--slate);width:28px;height:28px;"></div>
+                    <p style="margin-top:12px;color:var(--slate-mid);">Loading trips…</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- PASSENGER MANIFEST -->
+        <section id="manifest" class="section">
+            <div class="page-header">
+                <h1 class="page-title">Passenger Manifest</h1>
+            </div>
+
+            <div class="form-group" style="max-width:420px; margin-bottom:16px;">
+                <label class="form-label">Select Trip</label>
+                <select class="form-control" id="manifestTripSelect" onchange="loadManifest()">
+                    <option value="">— select a trip —</option>
+                </select>
+            </div>
+
+            <div class="card">
+                <div id="manifestEmpty" class="empty-state" style="display:none;">
+                    <div class="empty-state-icon">📋</div>
+                    <div class="empty-state-title">No passengers yet</div>
+                    <p>This trip has no bookings or passengers.</p>
+                </div>
+                <div class="table-wrap" id="manifestTableWrap">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Seat</th>
+                            <th>Age</th>
+                            <th>Discount</th>
+                            <th>Price</th>
+                            <th>Special Needs</th>
+                            <th>Payment</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                        </thead>
+                        <tbody id="manifestTbody">
+                        <tr><td colspan="9" style="text-align:center;color:#888;padding:24px;">Select a trip to view the manifest.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- CASH PAYMENTS -->
+        <section id="payments" class="section">
+            <div class="page-header">
+                <h1 class="page-title">Cash Payments</h1>
+            </div>
+
+            <div class="alert alert-warning show" style="margin-bottom:16px;">
+                Only passengers with <strong>pay-at-terminal</strong> payment method appear here. Mark them as paid after collecting cash on board.
+            </div>
+
+            <div class="form-group" style="max-width:420px; margin-bottom:16px;">
+                <label class="form-label">Select Active Trip</label>
+                <select class="form-control" id="paymentTripSelect" onchange="loadPayments()">
+                    <option value="">— select a trip —</option>
+                </select>
+            </div>
+
+            <div class="card">
+                <div id="paymentsEmpty" class="empty-state" style="display:none;">
+                    <div class="empty-state-icon">✅</div>
+                    <div class="empty-state-title">All caught up!</div>
+                    <p>No pending cash payments for this trip.</p>
+                </div>
+                <div class="table-wrap" id="paymentsTableWrap">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Passenger</th>
+                            <th>Seat</th>
+                            <th>Amount Due</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                        </thead>
+                        <tbody id="paymentsTbody">
+                        <tr><td colspan="5" style="text-align:center;color:#888;padding:24px;">Select a trip to see cash payments.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<!-- CONFIRM MODAL -->
+<div class="modal-overlay" id="confirmModal">
+    <div class="modal" style="width:360px;">
+        <h2 class="modal-title" id="confirmTitle">Confirm Action</h2>
+        <p id="confirmMsg" style="color:var(--slate-mid);font-size:14px;margin-bottom:20px;"></p>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeConfirm()">Return</button>
+            <button class="btn btn-primary" id="confirmOkBtn">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="modal-overlay" id="notificationsModal">
+    <div class="modal" style="width:520px;">
+        <h2 class="modal-title">Messages</h2>
+        <div id="notificationsList" style="display:flex;flex-direction:column;gap:10px;"></div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="markAllNotificationsRead()">Mark All Read</button>
+            <button class="btn btn-primary" onclick="closeModal('notificationsModal')">Return</button>
+        </div>
+    </div>
+</div>
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="/js/api.js"></script>
+<script>
+    /* ════════════════════════════════════════════════
+       ALBus Driver Dashboard
+       ════════════════════════════════════════════════ */
+
+    let me    = {};
+    let trips = [];
+    let sectionHistory = [];
+
+    // ── Init ──────────────────────────────────────────────────────
+    async function init() {
+        try {
+            const res = await API.me();
+            me = res.data;
+            if (me.role !== 'driver') { window.location.href = '/index.html'; return; }
+            document.getElementById('userBtn').textContent   = me.fullName || 'Driver';
+            setTerminalLabel(me.terminalName);
+            await loadTerminalLabel();
+            document.getElementById('driverTripDate').value = todayDate();
+            await loadTrips();
+            await refreshNotifications();
+        } catch(e) {
+            window.location.href = '/index.html';
+        }
+    }
+
+    async function loadTerminalLabel() {
+        try {
+            const res = await API.getDriverTerminal();
+            const terminal = res.data || {};
+            setTerminalLabel(terminal.terminalName || terminal.name || terminal.city || me.terminalName);
+        } catch(e) {
+            setTerminalLabel(me.terminalName);
+        }
+    }
+
+    function setTerminalLabel(label) {
+        document.getElementById('terminalLabel').textContent = label && label.trim() ? label : 'Terminal';
+    }
+
+    async function refreshNotifications() {
+        try {
+            const res = await API.getUnreadNotificationCount();
+            const count = res.data?.count || 0;
+            const badge = document.getElementById('notifBadge');
+            badge.textContent = count;
+            badge.style.display = count > 0 ? 'inline-block' : 'none';
+        } catch(e) {}
+    }
+
+    async function openNotifications() {
+        const list = document.getElementById('notificationsList');
+        list.innerHTML = '<div class="empty-state">Loading messages...</div>';
+        document.getElementById('notificationsModal').classList.add('show');
+        try {
+            const res = await API.getNotifications();
+            const rows = res.data || [];
+            list.innerHTML = rows.length ? rows.map(n => `
+                <div class="card" style="box-shadow:none;border-left:4px solid ${n.read ? 'var(--border)' : 'var(--red)'};">
+                    <div style="font-size:13px;color:var(--slate-mid);margin-bottom:4px;">${esc(n.createdAt || '')}</div>
+                    <div style="font-size:14px;line-height:1.45;">${esc(n.message)}</div>
+                    ${n.read ? '' : `<button class="btn btn-sm btn-ghost" style="margin-top:10px;" onclick="markNotificationRead(${n.id})">Mark Read</button>`}
+                </div>
+            `).join('') : '<div class="empty-state">No messages.</div>';
+        } catch(e) {
+            list.innerHTML = `<div class="alert alert-error show">${esc(e.message || 'Failed to load messages.')}</div>`;
+        }
+    }
+
+    async function markNotificationRead(id) {
+        await API.markNotificationRead(id);
+        await openNotifications();
+        await refreshNotifications();
+    }
+
+    async function markAllNotificationsRead() {
+        await API.markAllNotificationsRead();
+        await openNotifications();
+        await refreshNotifications();
+    }
+
+    function closeModal(id) {
+        document.getElementById(id).classList.remove('show');
+    }
+
+    // ── Section Navigation ────────────────────────────────────────
+    function showSection(id, btn, returning = false) {
+        const current = document.querySelector('.section.active')?.id;
+        if (!returning && current && current !== id) sectionHistory.push(current);
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if (btn) btn.classList.add('active');
+        syncReturnButton(id);
+        closeSidebar();
+    }
+
+    function returnToParentView() {
+        const previous = sectionHistory.pop() || 'mytrips';
+        showSection(previous, document.querySelector(`[onclick*="${previous}"]`), true);
+    }
+
+    function syncReturnButton(id) {
+        document.querySelectorAll('.return-parent-btn').forEach(b => b.remove());
+        if (id === 'mytrips') return;
+        const header = document.querySelector(`#${id} .page-header`);
+        if (!header) return;
+        header.insertAdjacentHTML('beforeend', '<button class="btn btn-ghost btn-sm return-parent-btn" onclick="returnToParentView()">Return</button>');
+    }
+
+    // ── Mobile sidebar ────────────────────────────────────────────
+    function toggleSidebar() {
+        const sb = document.getElementById('sidebar');
+        const ov = document.getElementById('sidebarOverlay');
+        sb.classList.toggle('open');
+        ov.classList.toggle('show');
+    }
+    function closeSidebar() {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('sidebarOverlay').classList.remove('show');
+    }
+
+    // ── Logout ────────────────────────────────────────────────────
+    async function logout() {
+        try { await API.logout(); } catch(e) {}
+        window.location.href = '/index.html';
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  MY TRIPS
+    // ══════════════════════════════════════════════════════════════
+
+    async function loadTrips() {
+        const btn = document.getElementById('refreshBtn');
+        btn.disabled = true;
+        btn.textContent = '↻ Loading…';
+        try {
+            const res = await API.getMyTrips();
+            trips = res.data || [];
+            useFirstDriverTripDateWhenCurrentDayIsEmpty();
+            renderDailyTrips();
+            populateTripSelects();
+        } catch(e) {
+            trips = [];
+            showToast('Failed to load trips.', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '↻ Refresh';
+        }
+    }
+
+    function renderDailyTrips() {
+        renderTripStats();
+        renderTripCards();
+    }
+
+    function selectedTripDate() {
+        return document.getElementById('driverTripDate')?.value || todayDate();
+    }
+
+    function tripsForSelectedDay() {
+        const day = selectedTripDate();
+        return trips.filter(t => tripDate(t.departureTime) === day);
+    }
+
+    function useFirstDriverTripDateWhenCurrentDayIsEmpty() {
+        const input = document.getElementById('driverTripDate');
+        if (!input || !trips.length || tripsForSelectedDay().length) return;
+        const firstTripDate = trips
+            .map(t => tripDate(t.departureTime))
+            .filter(Boolean)
+            .sort()[0];
+        if (firstTripDate) input.value = firstTripDate;
+    }
+
+    function renderTripStats() {
+        const daily = tripsForSelectedDay();
+        const scheduled = daily.filter(t => t.status === 'scheduled').length;
+        const departed  = daily.filter(t => t.status === 'departed').length;
+        const arrived   = daily.filter(t => t.status === 'arrived').length;
+        const cancelled = daily.filter(t => t.status === 'cancelled').length;
+
+        document.getElementById('tripStats').innerHTML = `
+        <div class="stat-card">
+            <div class="stat-label">Scheduled</div>
+            <div class="stat-value">${scheduled}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">In Progress</div>
+            <div class="stat-value" style="color:var(--yellow-dark);">${departed}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Completed</div>
+            <div class="stat-value" style="color:var(--success);">${arrived}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Total Assigned</div>
+            <div class="stat-value">${trips.length}</div>
+        </div>
+    `;
+    }
+
+    function renderTripCards() {
+        const container = document.getElementById('tripCards');
+        const daily = tripsForSelectedDay();
+        if (daily.length === 0) {
+            container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🚌</div>
+                <div class="empty-state-title">No trips for this day</div>
+                <p>Select another day to check assigned trips.</p>
+            </div>`;
+            return;
+        }
+
+        // Sort: scheduled first, then departed, then arrived/cancelled
+        // Sort by date first, then time — so round trips show in natural order
+        const sorted = [...daily].sort((a, b) =>
+            new Date(a.departureTime) - new Date(b.departureTime)
+        );
+        container.innerHTML = sorted.map(t => {
+            const booked = t.bookedSeats ?? (t.totalSeats - t.availableSeats);
+            return `
+        <div class="trip-card" id="trip-${t.id}">
+            <div class="trip-card-info">
+                <div class="trip-card-route">${esc(t.origin)} → ${esc(t.destination)}</div>
+                <div class="trip-card-meta">
+                    📅 ${formatDt(t.departureTime)}
+                    &nbsp;·&nbsp; 👥 ${booked}/${t.totalSeats} passengers
+                    &nbsp;·&nbsp; 💰 ${t.price} L
+                </div>
+            </div>
+            <div style="margin: 0 8px; flex-shrink:0;">${badge(t.status)}</div>
+            <div class="trip-card-actions">
+                ${t.status === 'scheduled'
+                ? `<button class="btn btn-primary btn-sm" onclick="confirmTransition(${t.id},'departed','Mark as Departed','Confirm that this trip has departed?')">Mark Departed</button>`
+                : ''}
+                ${t.status === 'departed'
+                ? `<button class="btn btn-secondary btn-sm" onclick="confirmTransition(${t.id},'arrived','Mark as Arrived','Confirm that this trip has arrived?')">Mark Arrived</button>`
+                : ''}
+                <button class="btn btn-ghost btn-sm" onclick="goToManifest(${t.id})">Manifest</button>
+            </div>
+        </div>`;
+        }).join('');
+    }
+
+    function populateTripSelects() {
+        const allOpts = trips.map(t =>
+            `<option value="${t.id}">${esc(t.origin)} → ${esc(t.destination)} — ${formatDt(t.departureTime)} [${t.status}]</option>`
+        ).join('');
+
+        document.getElementById('manifestTripSelect').innerHTML =
+            '<option value="">— select a trip —</option>' + allOpts;
+
+        const active = trips.filter(t => t.status === 'scheduled' || t.status === 'departed');
+        document.getElementById('paymentTripSelect').innerHTML =
+            '<option value="">— select a trip —</option>' +
+            active.map(t =>
+                `<option value="${t.id}">${esc(t.origin)} → ${esc(t.destination)} — ${formatDt(t.departureTime)}</option>`
+            ).join('');
+    }
+
+    // ── Status transitions ─────────────────────────────────────────
+    function confirmTransition(tripId, status, title, msg) {
+        openConfirm(title, msg, async () => {
+            try {
+                if (status === 'departed') await API.markDeparted(tripId);
+                else                       await API.markArrived(tripId);
+                showToast('Trip status updated!', 'success');
+                await loadTrips();
+            } catch(e) {
+                showToast(e.message || 'Failed to update status.', 'error');
+            }
+        });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  PASSENGER MANIFEST
+    // ══════════════════════════════════════════════════════════════
+
+    async function loadManifest() {
+        const tripId = document.getElementById('manifestTripSelect').value;
+        const tbody  = document.getElementById('manifestTbody');
+        const empty  = document.getElementById('manifestEmpty');
+        const wrap   = document.getElementById('manifestTableWrap');
+
+        if (!tripId) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#888;padding:24px;">Select a trip to view the manifest.</td></tr>';
+            empty.style.display = 'none';
+            wrap.style.display  = 'block';
+            return;
+        }
+
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;"><span class="spinner" style="border-color:rgba(0,0,0,.15);border-top-color:var(--slate);"></span> Loading…</td></tr>';
+
+        try {
+            const res  = await API.getDriverManifest(tripId);
+            const rows = res.data || [];
+
+            if (rows.length === 0) {
+                empty.style.display = 'block';
+                wrap.style.display  = 'none';
+                return;
+            }
+
+            empty.style.display = 'none';
+            wrap.style.display  = 'block';
+
+            tbody.innerHTML = rows.map(r => `
+            <tr>
+                <td><strong>${esc(r[1])}</strong></td>
+                <td><span class="badge badge-info">${esc(r[2])}</span></td>
+                <td>${esc(r[3])}</td>
+                <td>${r[4] && r[4] !== '0%' ? `<span class="badge badge-warning">${esc(r[4])}</span>` : '—'}</td>
+                <td><strong>${esc(r[5])}</strong></td>
+                <td>${r[6] && r[6] !== 'None' ? `<span style="color:var(--warning);">⚠ ${esc(r[6])}</span>` : '—'}</td>
+                <td>${paymentLabel(r[7])}</td>
+                <td>${badge(r[8])}</td>
+                <td>${r[8] === 'pending' ? `<button class="btn btn-ghost btn-sm" onclick="removePendingPassenger(${r[0]})">Remove</button>` : '-'}</td>
+            </tr>`).join('');
+        } catch(e) {
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#888;padding:24px;">${esc(e.message || 'Failed to load manifest.')}</td></tr>`;
+            showToast(e.message || 'Failed to load manifest.', 'error');
+        }
+    }
+
+    function goToManifest(tripId) {
+        // Switch to manifest tab
+        const current = document.querySelector('.section.active')?.id;
+        if (current && current !== 'manifest') sectionHistory.push(current);
+        const navItems = document.querySelectorAll('.nav-item');
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        navItems.forEach(b => b.classList.remove('active'));
+        document.getElementById('manifest').classList.add('active');
+        navItems[1].classList.add('active');
+        syncReturnButton('manifest');
+        document.getElementById('manifestTripSelect').value = tripId;
+        loadManifest();
+        closeSidebar();
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  CASH PAYMENTS
+    // ══════════════════════════════════════════════════════════════
+
+    async function loadPayments() {
+        const tripId = document.getElementById('paymentTripSelect').value;
+        const tbody  = document.getElementById('paymentsTbody');
+        const empty  = document.getElementById('paymentsEmpty');
+        const wrap   = document.getElementById('paymentsTableWrap');
+
+        if (!tripId) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#888;padding:24px;">Select a trip to see cash payments.</td></tr>';
+            empty.style.display = 'none';
+            wrap.style.display  = 'block';
+            return;
+        }
+
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;"><span class="spinner" style="border-color:rgba(0,0,0,.15);border-top-color:var(--slate);"></span> Loading…</td></tr>';
+
+        try {
+            const res  = await API.getCashPassengers(tripId);
+            const rows = res.data || [];
+
+            if (rows.length === 0) {
+                empty.style.display = 'block';
+                wrap.style.display  = 'none';
+                return;
+            }
+
+            empty.style.display = 'none';
+            wrap.style.display  = 'block';
+
+            tbody.innerHTML = rows.map(r => `
+            <tr id="pay-row-${r[0]}">
+                <td><strong>${esc(r[1])}</strong></td>
+                <td><span class="badge badge-info">${esc(r[2])}</span></td>
+                <td><strong>${esc(r[3])} L</strong></td>
+                <td id="pay-status-${r[0]}">${badge(r[4])}</td>
+                <td id="pay-action-${r[0]}">
+                    ${r[4] === 'pending'
+                ? `<button class="btn btn-primary btn-sm" onclick="collectPayment(${r[0]})">Mark Paid</button>
+                   <button class="btn btn-ghost btn-sm" onclick="removePendingPassenger(${r[0]})">Remove</button>`
+                : '—'}
+                </td>
+            </tr>`).join('');
+        } catch(e) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#888;padding:24px;">${esc(e.message || 'Failed to load payments.')}</td></tr>`;
+            showToast(e.message || 'Failed to load payments.', 'error');
+        }
+    }
+
+    async function collectPayment(bookingId) {
+        const btn = document.querySelector(`#pay-action-${bookingId} button`);
+        if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+        try {
+            await API.markPaid(bookingId);
+            showToast('Payment collected!', 'success');
+            await refreshPaymentAndManifest();
+        } catch(e) {
+            if (btn) { btn.disabled = false; btn.textContent = 'Mark Paid'; }
+            showToast(e.message || 'Failed to mark as paid.', 'error');
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  CONFIRM MODAL
+    // ══════════════════════════════════════════════════════════════
+
+    async function removePendingPassenger(bookingId) {
+        openConfirm('Remove passenger?', 'This removes the pending passenger from this trip and frees their seat.', async () => {
+            try {
+                await API.removePendingCashPassenger(bookingId);
+                showToast('Passenger removed from trip.', 'success');
+                await refreshPaymentAndManifest();
+            } catch(e) {
+                showToast(e.message || 'Failed to remove passenger.', 'error');
+            }
+        });
+    }
+
+    async function refreshPaymentAndManifest() {
+        const paymentTrip = document.getElementById('paymentTripSelect').value;
+        const manifestTrip = document.getElementById('manifestTripSelect').value;
+        if (paymentTrip) await loadPayments();
+        if (manifestTrip) await loadManifest();
+        await loadTrips();
+    }
+
+    let _confirmCallback = null;
+
+    function openConfirm(title, msg, callback) {
+        document.getElementById('confirmTitle').textContent = title;
+        document.getElementById('confirmMsg').textContent   = msg;
+        _confirmCallback = callback;
+        document.getElementById('confirmModal').classList.add('show');
+        document.getElementById('confirmOkBtn').onclick = async () => {
+            const callback = _confirmCallback;
+            closeConfirm();
+            if (callback) await callback();
+        };
+    }
+    function closeConfirm() {
+        document.getElementById('confirmModal').classList.remove('show');
+        _confirmCallback = null;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  HELPERS
+    // ══════════════════════════════════════════════════════════════
+
+    function formatDt(s) {
+        if (!s) return '—';
+        return s.replace('T', ' ').slice(0, 16);
+    }
+
+    function tripDate(s) {
+        return s ? s.replace('T', ' ').slice(0, 10) : '';
+    }
+
+    function todayDate() {
+        const d = new Date();
+        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        return d.toISOString().slice(0, 10);
+    }
+
+    function esc(str) {
+        if (str == null) return '—';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function paymentLabel(method) {
+        const map = {
+            online: 'Online',
+            card: 'Online',
+            terminal: 'Cash',
+            cash: 'Cash'
+        };
+        return map[String(method || '').toLowerCase()] || esc(method || '');
+    }
+
+    function badge(status) {
+        const map = {
+            scheduled:  ['badge-info',    'Scheduled'],
+            departed:   ['badge-warning', 'Departed'],
+            arrived:    ['badge-success', 'Arrived'],
+            cancelled:  ['badge-danger',  'Cancelled'],
+            pending:    ['badge-warning', 'Pending'],
+            paid:       ['badge-success', 'Paid'],
+            card:       ['badge-info',    'Card'],
+            cash:       ['badge-warning', 'Cash'],
+            approved:   ['badge-success', 'Approved'],
+            rejected:   ['badge-danger',  'Rejected'],
+        };
+        const [cls, label] = map[status?.toLowerCase()] || ['badge-info', status || '—'];
+        return `<span class="badge ${cls}">${label}</span>`;
+    }
+
+    function showToast(msg, type = 'default') {
+        const container = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = msg;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 3500);
+    }
+
+    // ── Close modal on overlay click ──────────────────────────────
+    document.getElementById('confirmModal').addEventListener('click', function(e) {
+        if (e.target === this) closeConfirm();
+    });
+    document.getElementById('notificationsModal').addEventListener('click', function(e) {
+        if (e.target === this) closeModal('notificationsModal');
+    });
+
+    // ── Keyboard: Escape closes modals ────────────────────────────
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') { closeConfirm(); closeModal('notificationsModal'); closeSidebar(); }
+    });
+
+    // ── Boot ──────────────────────────────────────────────────────
+    init();
+</script>
+</body>
+</html>

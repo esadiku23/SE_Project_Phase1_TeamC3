@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>ALBus - Admin Dashboard</title>
+    <link rel="stylesheet" href="/css/albus.css"/>
+    <style>
+        .section{display:none}.section.active{display:block}
+        .form-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+        .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+        .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center}
+        .modal-overlay.show{display:flex}
+        .toast{position:fixed;right:24px;bottom:24px;background:var(--slate);color:#fff;padding:12px 16px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);font-size:13px;z-index:20}
+        @media(max-width:768px){.form-row{grid-template-columns:1fr}.content{padding:20px 16px}}
+    </style>
+</head>
+<body>
+<div class="dashboard">
+    <header class="topbar">
+        <div class="wm wm-sm"><span class="wm-al">AL</span><span class="wm-bus">Bus</span></div>
+        <span class="topbar-spacer"></span>
+        <span class="topbar-label">Admin</span>
+        <button class="topbar-btn logout" onclick="logout()">Logout</button>
+    </header>
+    <nav class="sidebar">
+        <button class="nav-item active" onclick="showSection('dashboard', this)">📈 Dashboard</button>
+        <button class="nav-item" onclick="showSection('accounts', this)">👥 Accounts</button>
+        <button class="nav-item" onclick="showSection('buses', this)">🚌 Buses</button>
+        <button class="nav-item" onclick="showSection('capacity', this)">🅿️ Terminal Capacity</button>
+        <button class="nav-item" onclick="showSection('terminalOverview', this)">🏢 Terminal</button>
+        <button class="nav-item" onclick="showSection('messages', this)">💬 Messages</button>
+    </nav>
+    <main class="content">
+        <section id="dashboard" class="section active">
+            <div class="page-header">
+                <h1 class="page-title">Admin Dashboard</h1>
+                <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap;">
+                    <div class="form-group" style="margin:0; min-width:180px;">
+                        <label class="form-label">Day</label>
+                        <input class="form-control" id="adminDashTripDateFilter" type="date" onchange="setAdminTripDateFilter(this.value)"/>
+                    </div>
+                    <button class="btn btn-ghost btn-sm" onclick="refreshAll()">Refresh</button>
+                </div>
+            </div>
+            <div class="stat-grid" id="statsGrid"></div>
+            <div class="card section-gap">
+                <div style="display:flex;justify-content:space-between;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:12px;">
+                    <h2 class="section-title" style="margin:0;">Daily Trips</h2>
+                    <div class="form-group" style="margin:0;min-width:220px;">
+                        <label class="form-label">Terminal</label>
+                        <select class="form-control" id="adminDashTripTerminalFilter" onchange="setAdminDashTripTerminalFilter(this.value)"></select>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Route</th><th>Bus</th><th>Driver</th><th>Departure</th><th>Arrival</th><th>Seats</th><th>Status</th></tr></thead>
+                        <tbody id="dashboardTripsTbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card section-gap">
+                <h2 class="section-title" style="margin-bottom:12px;">Terminal Performance</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Terminal</th><th>Trips</th><th>Bookings</th><th>Revenue</th></tr></thead>
+                        <tbody id="terminalStatsTbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="accounts" class="section">
+            <div class="page-header"><h1 class="page-title">Accounts</h1></div>
+            <div class="form-row">
+                <div class="card">
+                    <h2 class="section-title" style="margin-bottom:16px;">Create Operator</h2>
+                    <div class="form-group"><label class="form-label">Full name</label><input class="form-control" id="operatorName"/></div>
+                    <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="operatorEmail" type="email"/></div>
+                    <div class="form-group"><label class="form-label">Password</label><input class="form-control" id="operatorPassword" type="password"/></div>
+                    <div class="form-group"><label class="form-label">Terminal</label><select class="form-control" id="operatorTerminal"></select></div>
+                    <button class="btn btn-primary" onclick="createOperator()">Create Operator</button>
+                </div>
+                <div class="card">
+                    <h2 class="section-title" style="margin-bottom:16px;">Create Driver</h2>
+                    <div class="form-group"><label class="form-label">Full name</label><input class="form-control" id="driverName"/></div>
+                    <div class="form-group"><label class="form-label">Email</label><input class="form-control" id="driverEmail" type="email"/></div>
+                    <div class="form-group"><label class="form-label">Password</label><input class="form-control" id="driverPassword" type="password"/></div>
+                    <div class="form-group"><label class="form-label">Terminal</label><select class="form-control" id="driverTerminal"></select></div>
+                    <button class="btn btn-primary" onclick="createDriver()">Create Driver</button>
+                </div>
+            </div>
+            <div class="card section-gap">
+                <div class="toolbar">
+                    <select class="form-control" id="userRoleFilter" style="max-width:220px" onchange="renderUsers()">
+                        <option value="all">Operators and drivers</option><option value="operator">Operators</option><option value="driver">Drivers</option>
+                    </select>
+                    <select class="form-control" id="userTerminalFilter" style="max-width:240px" onchange="renderUsers()">
+                        <option value="all">All terminals</option>
+                    </select>
+                    <select class="form-control" id="userStatusFilter" style="max-width:180px" onchange="renderUsers()">
+                        <option value="all">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Terminal</th><th>Status</th><th>Actions</th></tr></thead><tbody id="usersTbody"></tbody></table></div>
+            </div>
+        </section>
+
+        <section id="buses" class="section">
+            <div class="page-header"><h1 class="page-title">Buses</h1></div>
+            <div class="card">
+                <input type="hidden" id="busId"/>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Terminal</label><select class="form-control" id="busTerminal"></select></div>
+                    <div class="form-group"><label class="form-label">Plate number</label><input class="form-control" id="busPlate" placeholder="AA 123 BB"/></div>
+                    <div class="form-group"><label class="form-label">Model</label><input class="form-control" id="busModel" placeholder="Mercedes Tourismo"/></div>
+                    <div class="form-group"><label class="form-label">Seat count</label><input class="form-control" id="busSeats" type="number" min="1"/></div>
+                </div>
+                <button class="btn btn-primary" onclick="saveBus()">Save Bus</button>
+                <button class="btn btn-ghost" onclick="clearBusForm()">Clear</button>
+            </div>
+            <div class="card section-gap">
+                <div class="toolbar">
+                    <select class="form-control" id="busTerminalFilter" style="max-width:240px" onchange="renderBuses()">
+                        <option value="all">All terminals</option>
+                    </select>
+                    <select class="form-control" id="busStatusFilter" style="max-width:200px" onchange="renderBuses()">
+                        <option value="all">All statuses</option><option value="Available">Available</option><option value="In Service">In Service</option><option value="Under Maintenance">Under Maintenance</option><option value="Inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="table-wrap"><table><thead><tr><th>Terminal</th><th>Plate</th><th>Model</th><th>Seats</th><th>Status</th><th>Actions</th></tr></thead><tbody id="busesTbody"></tbody></table></div>
+            </div>
+        </section>
+
+        <section id="capacity" class="section">
+            <div class="page-header"><h1 class="page-title">Terminal Capacity</h1></div>
+            <div class="alert alert-info show">Set the maximum number of buses each terminal can handle per day.</div>
+            <div class="card">
+                <div class="toolbar">
+                    <select class="form-control" id="capacityTerminalFilter" style="max-width:240px" onchange="renderTerminalCapacity()">
+                        <option value="all">All terminals</option>
+                    </select>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Terminal</th><th>Max Buses / Day</th><th>Actions</th></tr></thead>
+                        <tbody id="capacityTbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="routes" class="section">
+            <div class="page-header">
+                <h1 class="page-title">Routes</h1>
+                <button class="btn btn-ghost btn-sm" onclick="cleanupRequestedRoutes()">Remove Requested-Only Routes</button>
+            </div>
+            <div class="card">
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Origin terminal</label><select class="form-control" id="routeOrigin" onchange="populateRouteDestinations()"></select></div>
+                    <div class="form-group"><label class="form-label">Destination</label><select class="form-control" id="routeDestination"></select></div>
+                    <div class="form-group"><label class="form-label">Distance (km)</label><input class="form-control" id="routeDistance" type="number" min="1"/></div>
+                </div>
+                <button class="btn btn-primary" onclick="createRoute()">Create Route</button>
+            </div>
+            <div class="card section-gap"><div class="table-wrap"><table><thead><tr><th>Origin</th><th>Destination</th><th>Distance</th><th>Status</th></tr></thead><tbody id="routesTbody"></tbody></table></div></div>
+        </section>
+
+        <section id="terminalOverview" class="section">
+            <div class="page-header">
+                <h1 class="page-title">Terminal</h1>
+                <button class="btn btn-ghost btn-sm" onclick="loadTerminalOverview()">Refresh</button>
+            </div>
+            <div class="alert alert-info show">Terminal destinations come from admin-defined routes. Counts include active operators and active buses only.</div>
+            <div class="card section-gap">
+                <div class="toolbar">
+                    <select class="form-control" id="terminalOverviewFilter" style="max-width:240px" onchange="renderTerminalOverview()">
+                        <option value="all">All terminals</option>
+                    </select>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Terminal</th><th>Trips To</th><th>Operators</th><th>Drivers</th><th>Buses</th></tr></thead>
+                        <tbody id="terminalOverviewTbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="passengers" class="section">
+            <div class="page-header"><h1 class="page-title">Passengers</h1></div>
+            <div class="alert alert-warning show">Passenger info is read-only for admins.</div>
+            <div class="card"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Created</th></tr></thead><tbody id="passengersTbody"></tbody></table></div></div>
+        </section>
+
+        <section id="messages" class="section">
+            <div class="page-header">
+                <h1 class="page-title">Messages</h1>
+                <button class="btn btn-ghost btn-sm" onclick="loadMessages()">Refresh</button>
+            </div>
+            <div class="alert alert-info show">Admin messages sent to operators and drivers appear here. Trip changes also create automatic messages.</div>
+            <div class="card">
+                <div class="toolbar">
+                    <select class="form-control" id="messageRoleFilter" style="max-width:180px" onchange="renderMessages()">
+                        <option value="all">All roles</option><option value="operator">Operators</option><option value="driver">Drivers</option>
+                    </select>
+                    <select class="form-control" id="messageStatusFilter" style="max-width:180px" onchange="renderMessages()">
+                        <option value="all">All statuses</option><option value="unread">Unread</option><option value="read">Read</option>
+                    </select>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>To</th><th>Role</th><th>Message</th><th>Status</th><th>Created</th></tr></thead>
+                        <tbody id="messagesTbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<div class="modal-overlay" id="messageModal">
+    <div class="modal" style="width:440px;">
+        <h2 class="modal-title">Send Message</h2>
+        <input type="hidden" id="messageUserId"/>
+        <div class="form-group">
+            <label class="form-label">Recipient</label>
+            <input class="form-control" id="messageRecipient" disabled/>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Message</label>
+            <textarea class="form-control" id="messageText" rows="4" placeholder="Write a short operational message"></textarea>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('messageModal')">Return</button>
+            <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+    let terminals = [], terminalOverview = [], routes = [], trips = [], buses = [], users = [], messages = [], capacityRows = [];
+    let adminTripDateFilter = todayDate();
+    let adminDashTripTerminalFilter = 'all';
+    let sectionHistory = [];
+
+    async function init(){
+        try {
+            const me = await API.me();
+            if (me.data.role !== 'admin') return location.href = '/index.html';
+            syncAdminTripDateInputs();
+            await refreshAll();
+        } catch(e) { location.href = '/index.html'; }
+    }
+
+    async function refreshAll(){
+        const [termRes, statsRes] = await Promise.all([API.getTerminals(), API.getAdminStats()]);
+        terminals = termRes.data || [];
+        fillTerminals();
+        renderStats(statsRes.data || {});
+        await Promise.all([loadUsers(), loadPassengers(), loadRoutes(), loadBuses(), loadTrips(), loadTerminalCapacity(), loadTerminalOverview(), loadMessages()]);
+    }
+
+    function fillTerminals(){
+        const options = terminalOptions();
+        ['operatorTerminal','driverTerminal','routeOrigin','busTerminal'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = options;
+        });
+        fillFilterTerminals();
+        populateRouteDestinations();
+    }
+
+    function fillFilterTerminals(){
+        const options = '<option value="all">All terminals</option>' + terminals
+            .map(t => `<option value="${t.id}">${esc(terminalLabel(t))}</option>`)
+            .join('');
+        ['userTerminalFilter','busTerminalFilter','capacityTerminalFilter','terminalOverviewFilter','adminDashTripTerminalFilter'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const selected = el.value;
+            el.innerHTML = options;
+            if (selected && Array.from(el.options).some(o => o.value === selected)) el.value = selected;
+        });
+        const dashFilter = document.getElementById('adminDashTripTerminalFilter');
+        if (dashFilter) {
+            dashFilter.value = Array.from(dashFilter.options).some(o => o.value === adminDashTripTerminalFilter)
+                ? adminDashTripTerminalFilter
+                : 'all';
+        }
+    }
+
+    function terminalOptions(excludedId = ''){
+        return '<option value="">Select terminal</option>' + terminals
+            .filter(t => String(t.id) !== String(excludedId))
+            .map(t => `<option value="${t.id}">${esc(terminalLabel(t))}</option>`)
+            .join('');
+    }
+
+    function populateRouteDestinations(){
+        const dest = document.getElementById('routeDestination');
+        const selected = dest.value;
+        const originId = document.getElementById('routeOrigin').value;
+        dest.innerHTML = terminalOptions(originId);
+        if (selected && selected !== originId && terminals.some(t => String(t.id) === String(selected))) {
+            dest.value = selected;
+        }
+    }
+
+    function renderStats(s){
+        const items = [['Admins',s.admins],['Operators',s.operators],['Drivers',s.drivers],['Passengers',s.passengers],['Routes',s.routes],['Trips',s.trips],['Bookings',s.bookings],['Revenue', formatMoney(s.totalRevenue)]];
+        document.getElementById('statsGrid').innerHTML = items.map(([label,val]) => `<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-value">${val ?? 0}</div></div>`).join('');
+        const rows = s.terminalStats || [];
+        document.getElementById('terminalStatsTbody').innerHTML = rows.map(r => `<tr><td>${esc(terminalLabel(r))}</td><td>${r.totalTrips}</td><td>${r.totalBookings}</td><td>${formatMoney(r.totalRevenue)}</td></tr>`).join('') || empty(4);
+    }
+
+    async function loadUsers(){
+        const res = await API.getAdminUsers('all');
+        users = res.data || [];
+        renderUsers();
+    }
+
+    function renderUsers(){
+        const role = document.getElementById('userRoleFilter')?.value || 'all';
+        const terminalId = document.getElementById('userTerminalFilter')?.value || 'all';
+        const status = document.getElementById('userStatusFilter')?.value || 'all';
+        const filtered = users.filter(u =>
+            (role === 'all' || u.role === role) &&
+            (terminalId === 'all' || String(u.terminalId) === String(terminalId)) &&
+            (status === 'all' || (status === 'active' ? u.active : !u.active))
+        );
+        document.getElementById('usersTbody').innerHTML = filtered.map(userRow).join('') || empty(6);
+    }
+
+    async function loadPassengers(){
+        const res = await API.getAdminUsers('passenger');
+        document.getElementById('passengersTbody').innerHTML = (res.data || []).map(u => `<tr><td>${esc(u.fullName)}</td><td>${esc(u.email)}</td><td>${esc(u.createdAt || '')}</td></tr>`).join('') || empty(3);
+    }
+
+    async function loadTerminalCapacity(){
+        const res = await API.getTerminalCapacity();
+        capacityRows = res.data || [];
+        renderTerminalCapacity();
+    }
+
+    function renderTerminalCapacity(){
+        const terminalId = document.getElementById('capacityTerminalFilter')?.value || 'all';
+        const filtered = capacityRows.filter(row => terminalId === 'all' || String(row.terminalId) === String(terminalId));
+        document.getElementById('capacityTbody').innerHTML = filtered.map(row => `
+            <tr>
+                <td>${esc(terminalLabel(row))}</td>
+                <td><input class="form-control" id="capacity-${row.terminalId}" type="number" min="0" value="${row.maxBusesDay}" style="max-width:140px"/></td>
+                <td><button class="btn btn-sm btn-primary" onclick="saveCapacity(${row.terminalId})">Save</button></td>
+            </tr>
+        `).join('') || empty(3);
+    }
+
+    async function loadMessages(){
+        const res = await API.getAdminNotifications();
+        messages = res.data || [];
+        renderMessages();
+    }
+
+    function renderMessages(){
+        const role = document.getElementById('messageRoleFilter')?.value || 'all';
+        const status = document.getElementById('messageStatusFilter')?.value || 'all';
+        const filtered = messages.filter(n =>
+            (role === 'all' || n.role === role) &&
+            (status === 'all' || (status === 'read' ? n.read : !n.read))
+        );
+        document.getElementById('messagesTbody').innerHTML = filtered.map(n => `
+            <tr>
+                <td>${esc(n.fullName)}<div style="font-size:12px;color:var(--slate-mid);">${esc(n.email)}</div></td>
+                <td>${badge(n.role)}</td>
+                <td>${esc(n.message)}</td>
+                <td>${n.read ? '<span class="badge badge-success">Read</span>' : '<span class="badge badge-warning">Unread</span>'}</td>
+                <td>${esc(n.createdAt || '')}</td>
+            </tr>
+        `).join('') || empty(5);
+    }
+
+    async function loadTerminalOverview(){
+        const res = await API.getAdminTerminalOverview();
+        terminalOverview = res.data || [];
+        renderTerminalOverview();
+    }
+
+    function renderTerminalOverview(){
+        const tbody = document.getElementById('terminalOverviewTbody');
+        if (!tbody) return;
+        const terminalId = document.getElementById('terminalOverviewFilter')?.value || 'all';
+        const filtered = terminalOverview.filter(row => terminalId === 'all' || String(row.terminalId) === String(terminalId));
+        tbody.innerHTML = filtered.map(row => `
+            <tr>
+                <td>${esc(terminalLabel(row))}</td>
+                <td>${esc(row.destinations || 'No routes defined')}</td>
+                <td>${row.operatorCount ?? 0}</td>
+                <td>${row.driverCount ?? 0}</td>
+                <td>${row.busCount ?? 0}</td>
+            </tr>
+        `).join('') || empty(5);
+    }
+
+    async function loadRoutes(){
+        const res = await API.getAdminRoutes();
+        routes = res.data || [];
+        document.getElementById('routesTbody').innerHTML = routes.map(r => `<tr><td>${esc(r.origin)}</td><td>${esc(r.destination)}</td><td>${r.distanceKm} km</td><td>${badge(r.status)}</td></tr>`).join('') || empty(4);
+        renderTerminalOverview();
+    }
+
+    async function loadTrips(){
+        const res = await API.getAdminTrips();
+        trips = res.data || [];
+        useFirstAdminTripDateWhenCurrentDayIsEmpty();
+        renderDashboardTrips();
+        renderTrips();
+    }
+
+    async function loadBuses(){
+        const res = await API.getAdminBuses();
+        buses = res.data || [];
+        renderBuses();
+        renderTerminalOverview();
+    }
+
+    function renderBuses(){
+        const terminalId = document.getElementById('busTerminalFilter')?.value || 'all';
+        const status = document.getElementById('busStatusFilter')?.value || 'all';
+        const filtered = buses.filter(b =>
+            (terminalId === 'all' || String(b.terminalId) === String(terminalId)) &&
+            (status === 'all' || b.status === status)
+        );
+        document.getElementById('busesTbody').innerHTML = filtered.map(b => `
+            <tr>
+                <td>${esc(b.terminalName)}</td>
+                <td>${esc(b.plateNumber)}</td>
+                <td>${esc(b.model)}</td>
+                <td>${b.seatCount}</td>
+                <td>${badge(b.status)}</td>
+                <td>
+                    ${b.active ? `<button class="btn btn-sm btn-danger" onclick="deactivateBus(${b.id})">Deactivate</button>` : ''}
+                </td>
+            </tr>`).join('') || empty(6);
+    }
+
+    function renderDashboardTrips(){
+        const dailyTrips = dashboardTripsForSelectedFilters();
+        document.getElementById('dashboardTripsTbody').innerHTML = dailyTrips.map(t => `
+            <tr>
+                <td>${esc(t.origin)} to ${esc(t.destination)}</td>
+                <td>${esc(t.busPlateNumber || '')}</td>
+                <td>${esc(t.driverName)}</td>
+                <td>${esc(t.departureTime)}</td>
+                <td>${esc(t.arrivalTime)}</td>
+                <td>${t.availableSeats}/${t.totalSeats}</td>
+                <td>${badge(t.status)}</td>
+            </tr>
+        `).join('') || `<tr><td colspan="7" style="text-align:center;color:#888;padding:24px;">No trips for this day.</td></tr>`;
+    }
+
+    function renderTrips(){
+        const tbody = document.getElementById('tripsTbody');
+        if (!tbody) return;
+        const dailyTrips = tripsForSelectedDay();
+        tbody.innerHTML = dailyTrips.map(t => {
+            const canCancel = t.status === 'scheduled' || t.status === 'departed';
+            return `<tr><td>${esc(t.origin)} to ${esc(t.destination)}</td><td>${esc(t.busPlateNumber || '')}</td><td>${esc(t.driverName)}</td><td>${esc(t.departureTime)}</td><td>${esc(t.arrivalTime)}</td><td>${t.availableSeats}/${t.totalSeats}</td><td>${badge(t.status)}</td><td><button class="btn btn-sm btn-ghost" onclick='editTrip(${JSON.stringify(t)})'>Edit</button>${canCancel ? ` <button class="btn btn-sm btn-danger" onclick="cancelTrip(${t.id})">Cancel</button>` : ''}</td></tr>`;
+        }).join('') || `<tr><td colspan="8" style="text-align:center;color:#888;padding:24px;">No trips for this day.</td></tr>`;
+    }
+
+    function setAdminTripDateFilter(value){
+        adminTripDateFilter = value || todayDate();
+        syncAdminTripDateInputs();
+        renderDashboardTrips();
+        renderTrips();
+    }
+
+    function setAdminDashTripTerminalFilter(value){
+        adminDashTripTerminalFilter = value || 'all';
+        renderDashboardTrips();
+    }
+
+    function dashboardTripsForSelectedFilters(){
+        return tripsForSelectedDay().filter(t =>
+            adminDashTripTerminalFilter === 'all'
+            || String(t.terminalId) === String(adminDashTripTerminalFilter)
+            || String(t.originTerminalId || '') === String(adminDashTripTerminalFilter)
+        );
+    }
+
+    function syncAdminTripDateInputs(){
+        ['adminDashTripDateFilter', 'adminTripDateFilter'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = adminTripDateFilter;
+        });
+    }
+
+    async function loadDriversForTrip(){
+        const terminalId = document.getElementById('tripTerminal').value;
+        if (!terminalId) { document.getElementById('tripDriver').innerHTML = '<option value="">Select driver</option>'; return; }
+        const res = await API.getAdminDrivers(terminalId);
+        document.getElementById('tripDriver').innerHTML = '<option value="">Select driver</option>' + (res.data || []).map(d => `<option value="${d.id}">${esc(d.fullName)}</option>`).join('');
+    }
+
+    async function onTripTerminalChange(){
+        await loadDriversForTrip();
+        populateTripRoutes();
+        populateTripBuses();
+        updateTripArrival();
+    }
+
+    function populateTripRoutes(selectedRouteId = ''){
+        const terminalId = document.getElementById('tripTerminal').value;
+        const routeSelect = document.getElementById('tripRoute');
+        const filtered = terminalId
+            ? uniqueRoutes(routes.filter(r => String(r.originTerminalId) === String(terminalId)), selectedRouteId)
+            : [];
+        routeSelect.innerHTML = '<option value="">Select route</option>' + filtered
+            .map(r => `<option value="${r.id}">${esc(r.origin)} to ${esc(r.destination)}</option>`)
+            .join('');
+        if (selectedRouteId && filtered.some(r => String(r.id) === String(selectedRouteId))) {
+            routeSelect.value = selectedRouteId;
+        }
+    }
+
+    function selectedTripRoute(){
+        const routeId = document.getElementById('tripRoute').value;
+        return routes.find(r => String(r.id) === String(routeId));
+    }
+
+    function populateTripBuses(selectedBusId = ''){
+        const terminalId = document.getElementById('tripTerminal').value;
+        const selectable = terminalId
+            ? buses.filter(b => String(b.terminalId) === String(terminalId) && b.active && b.status === 'Available')
+            : [];
+        document.getElementById('tripBus').innerHTML = '<option value="">Select bus</option>' +
+            selectable.map(b => `<option value="${b.id}" data-seats="${b.seatCount}">${esc(b.plateNumber)} · ${esc(b.model)} · ${b.seatCount} seats</option>`).join('');
+        if (selectedBusId && selectable.some(b => String(b.id) === String(selectedBusId))) {
+            document.getElementById('tripBus').value = selectedBusId;
+        }
+        syncTripBusSeats();
+    }
+
+    function syncTripBusSeats(){
+        const select = document.getElementById('tripBus');
+        document.getElementById('tripSeats').value = select.selectedOptions[0]?.dataset.seats || '';
+    }
+
+    function uniqueRoutes(items, selectedRouteId = ''){
+        const selectedId = String(selectedRouteId || '');
+        const byPath = new Map();
+        items.forEach(r => {
+            const key = `${r.originTerminalId || ''}|${String(r.origin || '').trim().toLowerCase()}|${String(r.destination || '').trim().toLowerCase()}`;
+            if (!byPath.has(key) || String(r.id) === selectedId) byPath.set(key, r);
+        });
+        return Array.from(byPath.values());
+    }
+
+    function tripDurationMinutes(route){
+        if (!route) return null;
+        return Math.round(Number(route.distanceKm || 0));
+    }
+
+    function updateTripArrival(){
+        const arrival = document.getElementById('tripArrival');
+        const departure = document.getElementById('tripDeparture').value;
+        const route = selectedTripRoute();
+        const minutes = tripDurationMinutes(route);
+        if (!departure || !minutes) {
+            arrival.value = '';
+            return;
+        }
+        const depDate = departure.slice(0, 10);
+        const next = new Date(new Date(departure).getTime() + minutes * 60000);
+        const derived = formatDateTimeLocal(next);
+        arrival.value = derived.slice(0, 10) === depDate ? derived : '';
+    }
+
+    async function createOperator(){
+        await createStaff('operator');
+    }
+
+    async function createDriver(){
+        await createStaff('driver');
+    }
+
+    async function createStaff(type){
+        const prefix = type === 'operator' ? 'operator' : 'driver';
+        const data = {
+            fullName: val(prefix + 'Name'), email: val(prefix + 'Email'),
+            password: document.getElementById(prefix + 'Password').value,
+            terminalId: val(prefix + 'Terminal')
+        };
+        try {
+            type === 'operator' ? await API.addOperator(data) : await API.addAdminDriver(data);
+            toast(`${type === 'operator' ? 'Operator' : 'Driver'} created.`);
+            ['Name','Email','Password'].forEach(s => document.getElementById(prefix + s).value = '');
+            await refreshAll();
+        } catch(e) { toast(e.message || 'Create failed.'); }
+    }
+
+    async function deactivateUser(id, name){
+        if (!confirm(`Deactivate ${name}? This account will no longer be able to log in.`)) return;
+        try {
+            await API.deactivateAdminUser(id);
+            toast('Account deactivated.');
+            await Promise.all([loadUsers(), loadPassengers(), loadTerminalOverview()]);
+        } catch(e) {
+            toast(e.message || 'Deactivate failed.');
+        }
+    }
+
+    function openMessageModal(id, name){
+        document.getElementById('messageUserId').value = id;
+        document.getElementById('messageRecipient').value = name;
+        document.getElementById('messageText').value = '';
+        openModal('messageModal');
+    }
+
+    async function sendMessage(){
+        const id = val('messageUserId');
+        const message = val('messageText');
+        if (!message) return toast('Message is required.');
+        try {
+            await API.sendAdminNotification(id, message);
+            closeModal('messageModal');
+            toast('Message sent.');
+            await loadMessages();
+        } catch(e) {
+            toast(e.message || 'Message failed.');
+        }
+    }
+
+    async function saveCapacity(terminalId){
+        const raw = val(`capacity-${terminalId}`);
+        try {
+            await API.updateTerminalCapacity(terminalId, raw);
+            toast('Terminal capacity updated.');
+            await loadTerminalCapacity();
+        } catch(e) {
+            toast(e.message || 'Capacity update failed.');
+        }
+    }
+
+    async function saveBus(){
+        const id = val('busId');
+        const data = {
+            terminalId: val('busTerminal'),
+            plateNumber: val('busPlate'),
+            model: val('busModel'),
+            seatCount: val('busSeats'),
+            status: 'available'
+        };
+        try {
+            await API.createAdminBus(data);
+            toast('Bus created.');
+            clearBusForm();
+            await Promise.all([loadBuses(), loadTerminalOverview()]);
+        } catch(e) { toast(e.message || 'Bus save failed.'); }
+    }
+
+    async function deactivateBus(id){
+        if (!confirm('Deactivate this bus? It will no longer be available for new trips.')) return;
+        try {
+            await API.deactivateAdminBus(id);
+            toast('Bus deactivated.');
+            await Promise.all([loadBuses(), loadTerminalOverview()]);
+        } catch(e) { toast(e.message || 'Deactivate failed.'); }
+    }
+
+    function clearBusForm(){
+        ['busId','busPlate','busModel','busSeats'].forEach(id => document.getElementById(id).value = '');
+    }
+
+    async function createRoute(){
+        try {
+            await API.createAdminRoute({ originTerminalId: val('routeOrigin'), destination: textOf('routeDestination'), distanceKm: val('routeDistance') });
+            document.getElementById('routeDistance').value = '';
+            toast('Route created.');
+            await Promise.all([loadRoutes(), loadTerminalOverview()]);
+        } catch(e) { toast(e.message || 'Route failed.'); }
+    }
+
+    async function cleanupRequestedRoutes(){
+        if (!confirm('Remove requested-only routes that are not used by any trip?')) return;
+        try {
+            const res = await API.cleanupRequestedRoutes();
+            toast(`${res.data?.removed ?? 0} requested-only route(s) removed.`);
+            await Promise.all([loadRoutes(), loadTerminalOverview()]);
+        } catch(e) { toast(e.message || 'Cleanup failed.'); }
+    }
+
+    async function saveTrip(){
+        const id = val('tripId');
+        updateTripArrival();
+        const route = selectedTripRoute();
+        const duration = tripDurationMinutes(route);
+        if (!duration || duration > 720) return toast('Route duration must be between 1 minute and 12 hours.');
+        if (!val('tripArrival')) return toast('Arrival must stay on the same date. Choose an earlier departure time.');
+        const data = {
+            originTerminalId: val('tripTerminal'), routeId: val('tripRoute'), driverId: val('tripDriver'),
+            busId: val('tripBus'),
+            departureTime: val('tripDeparture'), arrivalTime: val('tripArrival'),
+            price: val('tripPrice')
+        };
+        try {
+            id ? await API.updateAdminTrip(id, data) : await API.createAdminTrip(data);
+            toast(id ? 'Trip updated and notifications sent.' : 'Trip created and notifications sent.');
+            clearTripForm();
+            await loadTrips();
+        } catch(e) { toast(e.message || 'Trip failed.'); }
+    }
+
+    async function editTrip(t){
+        document.getElementById('tripId').value = t.id;
+        document.getElementById('tripTerminal').value = t.terminalId;
+        await loadDriversForTrip();
+        populateTripRoutes(t.routeId);
+        populateTripBuses(t.busId);
+        document.getElementById('tripDriver').value = t.driverId;
+        document.getElementById('tripDeparture').value = toLocalInput(t.departureTime);
+        updateTripArrival();
+        document.getElementById('tripPrice').value = t.price;
+        showSection('trips', document.querySelector('[onclick*="trips"]'));
+    }
+
+    async function cancelTrip(id){
+        if (!confirm('Cancel this trip? Affected low-passenger bookings will be notified.')) return;
+        try {
+            await API.updateAdminTripStatus(id, 'cancelled');
+            toast('Trip cancelled and notifications sent when required.');
+            await loadTrips();
+        } catch(e) { toast(e.message || 'Cancel failed.'); }
+    }
+
+    function clearTripForm(){
+        ['tripId','tripTerminal','tripRoute','tripDriver','tripBus','tripDeparture','tripArrival','tripPrice','tripSeats'].forEach(id => document.getElementById(id).value = '');
+        populateTripRoutes();
+        populateTripBuses();
+    }
+
+    function showSection(id, btn, returning = false){
+        const current = document.querySelector('.section.active')?.id;
+        if (!returning && current && current !== id) sectionHistory.push(current);
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        if (btn) btn.classList.add('active');
+        syncReturnButton(id);
+    }
+
+    function returnToParentView(){
+        const previous = sectionHistory.pop() || 'dashboard';
+        showSection(previous, document.querySelector(`[onclick*="${previous}"]`), true);
+    }
+
+    function syncReturnButton(id){
+        document.querySelectorAll('.return-parent-btn').forEach(b => b.remove());
+        if (id === 'dashboard') return;
+        const header = document.querySelector(`#${id} .page-header`);
+        if (!header) return;
+        header.insertAdjacentHTML('beforeend', '<button class="btn btn-ghost btn-sm return-parent-btn" onclick="returnToParentView()">Return</button>');
+    }
+
+    async function logout(){ await API.logout(); location.href = '/index.html'; }
+    function userRow(u){
+        const term = terminals.find(t => t.id === u.terminalId);
+        const canDeactivate = u.active && (u.role === 'operator' || u.role === 'driver');
+        return `<tr>
+            <td>${esc(u.fullName)}</td>
+            <td>${esc(u.email)}</td>
+            <td>${badge(u.role)}</td>
+            <td>${esc(term ? terminalLabel(term) : '')}</td>
+            <td>${u.active ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-danger">Inactive</span>'}</td>
+            <td>
+                ${(u.role === 'operator' || u.role === 'driver') && u.active ? `<button class="btn btn-sm btn-secondary" onclick="openMessageModal(${u.id}, '${escJs(u.fullName)}')">Message</button>` : ''}
+                ${canDeactivate ? `<button class="btn btn-sm btn-ghost" onclick="deactivateUser(${u.id}, '${escJs(u.fullName)}')">Deactivate</button>` : ''}
+            </td>
+        </tr>`;
+    }
+    function badge(text){ return `<span class="badge badge-info">${esc(text || '')}</span>`; }
+    function empty(cols){ return `<tr><td colspan="${cols}" style="text-align:center;color:#888;padding:24px;">No records.</td></tr>`; }
+    function val(id){ return document.getElementById(id).value.trim(); }
+    function textOf(id){ const el = document.getElementById(id); return el.options[el.selectedIndex]?.text || ''; }
+    function terminalLabel(t){ return t?.name || t?.city || ''; }
+    function toLocalInput(v){ return v ? v.replace(' ', 'T').slice(0,16) : ''; }
+    function selectedTripDate(){ return adminTripDateFilter || todayDate(); }
+    function tripsForSelectedDay(){ return trips.filter(t => tripDate(t.departureTime) === selectedTripDate()); }
+    function useFirstAdminTripDateWhenCurrentDayIsEmpty(){
+        if (!trips.length || tripsForSelectedDay().length) return;
+        const firstTripDate = trips
+            .map(t => tripDate(t.departureTime))
+            .filter(Boolean)
+            .sort()[0];
+        if (!firstTripDate) return;
+        adminTripDateFilter = firstTripDate;
+        syncAdminTripDateInputs();
+    }
+    function tripDate(v){ return v ? v.replace('T', ' ').slice(0, 10) : ''; }
+    function todayDate(){ const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
+    function formatDateTimeLocal(date) {
+        const pad = value => String(value).padStart(2, '0');
+        return [
+            date.getFullYear(),
+            pad(date.getMonth() + 1),
+            pad(date.getDate())
+        ].join('-') + 'T' + [pad(date.getHours()), pad(date.getMinutes())].join(':');
+    }
+    function formatMoney(value){ return `${Number(value || 0).toFixed(2)} L`; }
+    function esc(str){ return String(str ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function escJs(str){ return String(str ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, ' '); }
+    function openModal(id){ document.getElementById(id).classList.add('show'); }
+    function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+    function toast(msg){ const t = document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(() => t.remove(), 3000); }
+    init();
+</script>
+</body>
+</html>
